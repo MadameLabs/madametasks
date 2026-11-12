@@ -63,8 +63,8 @@ importers:
         specifier: file:vendor/mdbase-dev-connect-protocol-0.1.0-beta.129-c280cd194ffd.tgz
         version: file:vendor/mdbase-dev-connect-protocol-0.1.0-beta.129-c280cd194ffd.tgz
       '@mdbase-dev/i18n':
-        specifier: 0.1.0-beta.166
-        version: 0.1.0-beta.166(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(react@19.2.8)(rolldown@1.1.5)
+        specifier: 0.1.0-beta.176
+        version: 0.1.0-beta.176(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(react@19.2.8)(rolldown@1.1.5)
       '@mdbase-dev/obsidian-runtime':
         specifier: file:vendor/mdbase-dev-obsidian-runtime-app-storage-0.0.0-07ae574c-991106d7.tgz
         version: file:vendor/mdbase-dev-obsidian-runtime-app-storage-0.0.0-07ae574c-991106d7.tgz
@@ -72,8 +72,8 @@ importers:
         specifier: file:vendor/sdk-e8ffb806-production-beta188.tgz
         version: file:vendor/sdk-e8ffb806-production-beta188.tgz
       '@mdbase-dev/ui':
-        specifier: 0.1.0-beta.166
-        version: 0.1.0-beta.166(@codemirror/commands@6.11.0)(@codemirror/language@6.12.4)(@codemirror/state@6.7.1)(@codemirror/view@6.43.9)(@lezer/common@1.5.2)(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(@mdbase-dev/i18n@0.1.0-beta.166(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(react@19.2.8)(rolldown@1.1.5))(@mdbase-dev/sdk@file:vendor/sdk-e8ffb806-production-beta188.tgz)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: 0.1.0-beta.176
+        version: 0.1.0-beta.176(@codemirror/commands@6.11.0)(@codemirror/language@6.12.4)(@codemirror/state@6.7.1)(@codemirror/view@6.43.9)(@lezer/common@1.5.2)(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(@mdbase-dev/i18n@0.1.0-beta.176(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(react@19.2.8)(rolldown@1.1.5))(@mdbase-dev/sdk@file:vendor/sdk-e8ffb806-production-beta188.tgz)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@sqlite.org/sqlite-wasm':
         specifier: 3.53.4-build2
         version: 3.53.4-build2
@@ -1025,8 +1025,8 @@ packages:
     resolution: {integrity: sha512-c0iOOWEcNJRstdyUJ6aqJ3puVR5C9jXW4MBHmQnHI2c4vgOeKi5VWfiuueWx3ArvtwB3nPuAaXHhll/OKH/+Yw==, tarball: file:vendor/mdbase-dev-connect-protocol-0.1.0-beta.129-c280cd194ffd.tgz}
     version: 0.1.0-beta.129
 
-  '@mdbase-dev/i18n@0.1.0-beta.166':
-    resolution: {integrity: sha512-Ny4M+yQFf1D9CiSjoDLRB9xrVTKBbbxw6FhbHuGV4PAsXvZPWH5Tlq+vb+MsSXwXeXFhPYJBl6wffvUN/SZQNw==}
+  '@mdbase-dev/i18n@0.1.0-beta.176':
+    resolution: {integrity: sha512-7ZN3WFvh7h1tZyYNbG0i64egcbRZ6d11lr73kBpsesaJY/65aiHlwWNhnAjkAqvOmCxDEDqoTNXwtBWRCp8Hlg==}
     hasBin: true
     peerDependencies:
       '@lingui/core': 6.9.0
@@ -1045,9 +1045,9 @@ packages:
     bundledDependencies:
       - '@mdbase-dev/connect-protocol'
 
-  '@mdbase-dev/ui@0.1.0-beta.166':
-    resolution: {integrity: sha512-Bv6WfY/tT7f8wlZBu+Ll7KyjmL/pSjGQiKcQidlW82OWUmtX+fxAXbOPu8/OINNxyYS+8mWLaB0lCjBRZK0Exg==}
-    version: 0.1.0-beta.166
+  '@mdbase-dev/ui@0.1.0-beta.176':
+    resolution: {integrity: sha512-vqmP04884Hg7zYm255AnUeTJ8jOP04o1Xp1XETm4awQ/grSTzya2TbFazqwG8FeMGsi7OKXC382u8d+zrW4Xkg==}
+    version: 0.1.0-beta.176
     peerDependencies:
       '@codemirror/commands': ^6.0.0
       '@codemirror/language': ^6.0.0
@@ -5306,7 +5306,7 @@ snapshots:
       '@noble/hashes': 2.4.0
       yaml: 2.9.1
 
-  '@mdbase-dev/i18n@0.1.0-beta.166(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(react@19.2.8)(rolldown@1.1.5)':
+  '@mdbase-dev/i18n@0.1.0-beta.176(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(react@19.2.8)(rolldown@1.1.5)':
     dependencies:
       '@lingui/cli': 6.9.0(rolldown@1.1.5)
       '@lingui/conf': 6.9.0
@@ -5332,13 +5332,13 @@ snapshots:
       '@noble/curves': 2.4.0
       '@noble/hashes': 2.4.0
 
-  '@mdbase-dev/ui@0.1.0-beta.166(@codemirror/commands@6.11.0)(@codemirror/language@6.12.4)(@codemirror/state@6.7.1)(@codemirror/view@6.43.9)(@lezer/common@1.5.2)(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(@mdbase-dev/i18n@0.1.0-beta.166(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(react@19.2.8)(rolldown@1.1.5))(@mdbase-dev/sdk@file:vendor/sdk-e8ffb806-production-beta188.tgz)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@mdbase-dev/ui@0.1.0-beta.176(@codemirror/commands@6.11.0)(@codemirror/language@6.12.4)(@codemirror/state@6.7.1)(@codemirror/view@6.43.9)(@lezer/common@1.5.2)(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(@mdbase-dev/i18n@0.1.0-beta.176(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(react@19.2.8)(rolldown@1.1.5))(@mdbase-dev/sdk@file:vendor/sdk-e8ffb806-production-beta188.tgz)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@fontsource/azeret-mono': 5.3.0
       '@fontsource/ibm-plex-sans': 5.3.0
       '@lingui/core': 6.9.0(@babel/core@7.29.7)
       '@lingui/react': 6.9.0(@babel/core@7.29.7)(react@19.2.8)
-      '@mdbase-dev/i18n': 0.1.0-beta.166(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(react@19.2.8)(rolldown@1.1.5)
+      '@mdbase-dev/i18n': 0.1.0-beta.176(@lingui/core@6.9.0(@babel/core@7.29.7))(@lingui/react@6.9.0(@babel/core@7.29.7)(react@19.2.8))(react@19.2.8)(rolldown@1.1.5)
       react: 19.2.8
     optionalDependencies:
       '@codemirror/commands': 6.11.0
