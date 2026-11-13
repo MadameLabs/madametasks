@@ -1,7 +1,8 @@
 /** Production stays at the cutover target and staging at its exact Pages
  * alias; LAB binds the exact origin its build was configured for: a loopback
  * port or a public HTTPS preview (e.g. Pages). App loopback is LAB-only. */
-export const TASKNOTES_PRODUCTION_ORIGIN = "https://app.tasknotes.dev";
+// MadameTasks: produção no Connect da Madame Labs.
+export const TASKNOTES_PRODUCTION_ORIGIN = "https://tasks.madamelabs.com.br";
 export const TASKNOTES_IOS_ORIGIN = "capacitor://app.tasknotes.dev";
 export const TASKNOTES_STAGING_ORIGIN = "https://staging.tasknotes.dev";
 export const TASKNOTES_LAB_ORIGIN = "http://127.0.0.1:48218";
@@ -35,7 +36,7 @@ export function requireTaskNotesAppEnvironment(
       !(nativeIos && currentOrigin === TASKNOTES_IOS_ORIGIN)
     )
       throw new Error(
-        "TaskNotes production replaces the old app at app.tasknotes.dev.",
+        "MadameTasks production must open at tasks.madamelabs.com.br.",
       );
     return Object.freeze({
       environment: "production",

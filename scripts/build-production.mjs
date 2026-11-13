@@ -13,8 +13,12 @@ export function productionBuildEnvironment(environment = process.env) {
   return {
     ...environment,
     VITE_TASKNOTES_ENVIRONMENT: "production",
-    VITE_TASKNOTES_EDITOR_ORIGIN: "https://editor.mdbase.dev",
-    VITE_TASKNOTES_CALENDAR_ORIGIN: "https://calendar.tasknotes.dev",
+    // MadameTasks: Editor no Connect da Madame Labs; sem o serviço de agenda do TaskNotes.
+    VITE_TASKNOTES_EDITOR_ORIGIN:
+      environment.VITE_TASKNOTES_EDITOR_ORIGIN || "https://connect.madamelabs.com.br",
+    ...(environment.VITE_TASKNOTES_CALENDAR_ORIGIN
+      ? { VITE_TASKNOTES_CALENDAR_ORIGIN: environment.VITE_TASKNOTES_CALENDAR_ORIGIN }
+      : {}),
   };
 }
 

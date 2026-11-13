@@ -18,8 +18,7 @@ export const TASKNOTES_INSTALLATION_ORIGINS = Object.freeze({
     "app-runtime": Object.freeze(["https://staging.tasknotes.dev"]),
   }),
   production: Object.freeze({
-    "app-runtime": Object.freeze(["https://app.tasknotes.dev"]),
-    mobile: Object.freeze(["capacitor://app.tasknotes.dev"]),
+    "app-runtime": Object.freeze(["https://tasks.madamelabs.com.br"]),
   }),
 });
 
@@ -53,7 +52,7 @@ export async function buildTaskNotesManifest({
   return {
     manifest_version: 1,
     id: "dev.tasknotes.app",
-    name: "TaskNotes",
+    name: "MadameTasks",
     homepage: `${identityUrl}/`,
     icon: `${identityUrl}/icon.png`,
     redirect_uris: [

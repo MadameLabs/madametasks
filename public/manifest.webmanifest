@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "TaskNotes",
-  "short_name": "TaskNotes",
+  "name": "MadameTasks",
+  "short_name": "MadameTasks",
   "description": "A dependable task manager built on portable Markdown records.",
   "start_url": "./",
   "scope": "./",
