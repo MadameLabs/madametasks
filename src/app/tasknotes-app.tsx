@@ -28,7 +28,8 @@ import { followSignOutRoute } from "./sign-out-route";
 import { StarterViewArming } from "./starter-view-arming";
 
 const app = {
-  name: "TaskNotes",
+  // MadameTasks: o mesmo nome que o index.html pinta antes do script.
+  name: "MadameTasks",
   mark: <img alt="" src={tasknotesMarkUrl} />,
 };
 

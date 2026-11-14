@@ -30,8 +30,10 @@ describe("native Capacitor configuration", () => {
       "https://app.tasknotes.dev",
     );
     expect(manifestOrigin).toBe(TASKNOTES_NATIVE_APPLICATION_ORIGIN);
+    // MadameTasks publica só a web: o gerador do manifesto aponta para a
+    // origem dela, e a configuração nativa fica a do upstream, sem uso.
     expect(manifestWriter).toContain(
-      `(development ? "http://127.0.0.1:4173" : "${TASKNOTES_NATIVE_APPLICATION_ORIGIN}")`,
+      `(development ? "http://127.0.0.1:4173" : "https://tasks.madamelabs.com.br")`,
     );
     expect(
       `${capacitorConfig.server.androidScheme}://${capacitorConfig.server.hostname}`,

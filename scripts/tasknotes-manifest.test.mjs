@@ -35,9 +35,9 @@ describe("TaskNotes mdbase manifest", () => {
       staging: {
         "app-runtime": ["https://staging.tasknotes.dev"],
       },
+      // MadameTasks: produção só web, sem a origem capacitor://.
       production: {
-        "app-runtime": ["https://app.tasknotes.dev"],
-        mobile: ["capacitor://app.tasknotes.dev"],
+        "app-runtime": ["https://tasks.madamelabs.com.br"],
       },
     });
     expect(manifest.notifications.criteria).toEqual([

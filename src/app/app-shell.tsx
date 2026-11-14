@@ -440,14 +440,14 @@ export function AppShell() {
       <aside className="navigation-rail" aria-label={t({ message: "Primary" })}>
         <div className="rail-heading">
           <button
-            aria-label="TaskNotes"
-            title="TaskNotes"
+            aria-label="MadameTasks"
+            title="MadameTasks"
             className="wordmark"
             type="button"
             onClick={() => navigate({ page: "home" })}
           >
             <img alt="" src={tasknotesMarkUrl} />
-            <span>TaskNotes</span>
+            <span>MadameTasks</span>
           </button>
           <button
             className="sidebar-toggle icon-action"
