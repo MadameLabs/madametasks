@@ -130,6 +130,9 @@ import type { ProjectShortcut } from "../domain/project-shortcuts";
 import type { TaskView } from "../domain/view";
 import type { OperationalError } from "../application/operational-error";
 
+// MadameTasks: nome próprio da marca, fora do catálogo de tradução.
+const BRAND_NAME = "MadameTasks";
+
 export function AppShell() {
   const { t } = useLingui();
   const keyboardOccluded = useKeyboardOcclusion();
@@ -440,14 +443,14 @@ export function AppShell() {
       <aside className="navigation-rail" aria-label={t({ message: "Primary" })}>
         <div className="rail-heading">
           <button
-            aria-label="MadameTasks"
-            title="MadameTasks"
+            aria-label={BRAND_NAME}
+            title={BRAND_NAME}
             className="wordmark"
             type="button"
             onClick={() => navigate({ page: "home" })}
           >
             <img alt="" src={tasknotesMarkUrl} />
-            <span>MadameTasks</span>
+            <span>{BRAND_NAME}</span>
           </button>
           <button
             className="sidebar-toggle icon-action"
