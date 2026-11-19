@@ -1,4 +1,4 @@
-> **Fork maintained by [Madame Labs](https://github.com/MadameLabs) ([@engarthurcardoso](https://github.com/engarthurcardoso)).** Original project by Callum Alpass: [callumalpass/tasknotes-app](https://github.com/callumalpass/tasknotes-app). The upstream repository has no license yet; we have asked the author for permission in [callumalpass/tasknotes-app#514](https://github.com/callumalpass/tasknotes-app/issues/514). Report problems with this fork in [MadameLabs/madametasks](https://github.com/MadameLabs/madametasks/issues).
+> **Fork maintained by [Madame Labs](https://github.com/MadameLabs) ([@engarthurcardoso](https://github.com/engarthurcardoso)).** Original project by Callum Alpass: [callumalpass/tasknotes-app](https://github.com/callumalpass/tasknotes-app). The author has granted use under the MIT license (confirmed by email and in [callumalpass/tasknotes-app#514](https://github.com/callumalpass/tasknotes-app/issues/514)); the LICENSE file is still to be added upstream. Report problems with this fork in [MadameLabs/madametasks](https://github.com/MadameLabs/madametasks/issues).
 
 # TaskNotes
 
