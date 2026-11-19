@@ -25,7 +25,9 @@ import {
   type Hold,
   type SyncStatus,
   type WriteLedgerEntry,
+  type TimersApi,
 } from "@mdbase-dev/sdk";
+import { desiredTaskTimers } from "../domain/reminder-timers";
 import {
   parseFrontmatter,
   serializeMarkdownDocument,
@@ -89,6 +91,8 @@ import { runtimeTimezone } from "../domain/runtime-timezone";
 import {
   iterateNativeDiscovery,
   nativeViewSelection,
+  unreadableViewSources,
+  type UnreadableViewSource,
 } from "./next-bases-discovery";
 import { readNativeRows } from "./next-bases-rows";
 import { nativeCellValue } from "./next-bases-values";
@@ -252,6 +256,14 @@ export function nativeUnsupported(message: string): MdbaseError {
 /** Direct native SDK implementation of the application port.
  * Unsupported native metadata is explicit, never reconstructed in the app.
  */
+/** Must match the `task.reminder` criterion in scripts/tasknotes-manifest.mjs. */
+export const REMINDER_TIMER_CRITERION = "task.reminder";
+export const REMINDER_TIMER_NAMESPACE = "task-reminders";
+/** Connect's per-reconcile limit; the earliest reminders are kept. */
+const MAX_REMINDER_TIMERS = 10_000;
+const REMINDER_TIMER_RESEND_MS = 10 * 60_000;
+export type ReminderTimers = Pick<TimersApi, "reconcile">;
+
 export class NextTaskRepository implements TaskRepository {
   readonly files: NextCollectionFileStore;
   readonly defaultViewSourceCreation = "explicit-only" as const;
@@ -295,6 +307,11 @@ export class NextTaskRepository implements TaskRepository {
         (slot.execution ? JSON.stringify(slot.execution).length : 0)),
   );
   private nativeViews = new Map<string, AppBasesDescriptor>();
+  /** The one native discovery pass in flight, shared by every caller. */
+  private discovery: {
+    pending: Promise<TaskViewDocument[]>;
+    signal: AbortSignal;
+  } | null = null;
   private readonly sourceRecords = new Map<string, string>();
   /** Records whose current read carries a hold or an unresolved conflict. */
   private readonly conflictedRecords = new Set<string>();
@@ -385,12 +402,24 @@ export class NextTaskRepository implements TaskRepository {
       this.listeners.forEach((listener) => listener({ kind: "data" }));
   });
   private changesWatch: ChangesWatch | null = null;
-  /** The TaskNotes settings record (_settings/dev.tasknotes.md). */
+  /** The TaskNotes settings record, saved at the path it was read from. */
   private readonly settings: TaskNotesSettingsStore;
   /** Whether the collection defines the tasknotes-settings type. */
   private settingsType = false;
   private readonly clientOwnership: "owned" | "borrowed";
   private readonly peopleClient?: Pick<MdbasePeopleClient, "directory">;
+  private readonly reminderTimers?: () => ReminderTimers | undefined;
+  /** The last set Connect accepted, so an unchanged set is not resent. */
+  private lastReminderTimers?: {
+    timers: ReminderTimers;
+    snapshot: string;
+    at: number;
+  };
+  private reminderReconciliation?: {
+    scope: AbortController;
+    requested: number;
+    promise: Promise<void>;
+  };
 
   constructor(
     private readonly client: MdbaseClient,
@@ -400,10 +429,13 @@ export class NextTaskRepository implements TaskRepository {
       /** Host-owned clients survive this adapter's disposal; default remains owned. */
       clientOwnership?: "owned" | "borrowed";
       peopleClient?: Pick<MdbasePeopleClient, "directory">;
+      /** The connection's timer access, absent until notification access is approved. */
+      timers?: () => ReminderTimers | undefined;
     } = {},
   ) {
     this.clientOwnership = options.clientOwnership ?? "owned";
     this.peopleClient = options.peopleClient;
+    this.reminderTimers = options.timers;
     this.files = new NextCollectionFileStore(
       client.files,
       () => this.scope.signal,
@@ -509,11 +541,22 @@ export class NextTaskRepository implements TaskRepository {
   }
 
   private signal(extra?: AbortSignal): AbortSignal {
+    return this.requestSignal(this.lifetimeSignal(extra));
+  }
+  /** The owner's lifetime without a deadline, for a READ whose request count
+   * grows with the collection. View discovery reads every record, one relayed
+   * round trip per page, so one foreground deadline over the whole pass would
+   * refuse every attempt once a vault is large enough (#436). Such a READ
+   * bounds each request with `requestSignal` instead. */
+  private lifetimeSignal(extra?: AbortSignal): AbortSignal {
     if (this.disposed)
       throw new Error("The native collection instance has been disposed.");
+    return AbortSignal.any([this.scope.signal, ...(extra ? [extra] : [])]);
+  }
+  /** One request's foreground deadline under a longer-lived owner. */
+  private requestSignal(signal: AbortSignal): AbortSignal {
     return AbortSignal.any([
-      this.scope.signal,
-      ...(extra ? [extra] : []),
+      signal,
       AbortSignal.timeout(TASKNOTES_REQUEST_BUDGETS.foregroundMs),
     ]);
   }
@@ -607,6 +650,9 @@ export class NextTaskRepository implements TaskRepository {
     signal: AbortSignal,
     read: () => Promise<Result>,
   ): Promise<Result> {
+    // A lifetime-owned READ has no overall deadline, so refusals that no
+    // local change explains are bounded here as they were by the deadline.
+    let unexplainedSince: number | null = null;
     for (;;) {
       signal.throwIfAborted();
       if (this.changeWindow.unsettled) await this.changeWindow.quiet(signal);
@@ -631,8 +677,16 @@ export class NextTaskRepository implements TaskRepository {
         // When a local change event retired it, the new generation already
         // exists: reread at once (a coalesced native change still waits for
         // its quiet window above). Pace only a refusal no local event explains.
-        if (this.dataRevision === generation)
+        if (this.dataRevision !== generation) unexplainedSince = null;
+        else {
+          unexplainedSince ??= performance.now();
+          if (
+            performance.now() - unexplainedSince >=
+            TASKNOTES_REQUEST_BUDGETS.foregroundMs
+          )
+            throw reason;
           await waitForChangeWindow(250, signal);
+        }
       }
     }
   }
@@ -831,6 +885,8 @@ export class NextTaskRepository implements TaskRepository {
       const before = new Map(
         [...this.cache].map(([id, value]) => [id, JSON.stringify(value.task)]),
       );
+      const compared = this.hasLoadedIndex;
+      const model = this.modelSignature();
       await this.indexLoading;
       signal.throwIfAborted();
       if (
@@ -850,7 +906,15 @@ export class NextTaskRepository implements TaskRepository {
       const removed = [...before.keys()].filter(
         (id) => !this.cache.has(id),
       ).length;
-      this.emit("data");
+      // The change watch, not a refresh, retires READ cuts when the collection
+      // moves. A refresh that reread the same tasks and model, or that loaded
+      // the task index for the first time, leaves reads in flight current.
+      // Retiring them restarted the view discovery pass, many round trips on a
+      // relayed collection, at the post-start and every periodic refresh
+      // (#436). Screens still hear "data" so they reload.
+      if ((compared && (changed || removed)) || this.modelSignature() !== model)
+        this.emit("data");
+      else this.notify("data");
       return {
         scanned: this.cache.size,
         changed,
@@ -861,6 +925,77 @@ export class NextTaskRepository implements TaskRepository {
       this.noteOperationFailure(reason, signal);
       throw reason;
     }
+  }
+
+  /**
+   * Replace this collection's reminder timers with one per future reminder
+   * on an open task. Calls made while one runs share it and trigger one more
+   * pass, so the last pass always sees the latest tasks. Without timer access
+   * (notification access not approved) there is nothing to reconcile.
+   */
+  reconcileReminders(): Promise<void> {
+    const timers = this.reminderTimers?.();
+    if (!timers) return Promise.resolve();
+    const active = this.reminderReconciliation;
+    if (active && active.scope === this.scope) {
+      active.requested++;
+      return active.promise;
+    }
+    const run = {
+      scope: this.scope,
+      requested: 1,
+      promise: Promise.resolve(),
+    };
+    run.promise = (async () => {
+      let completed = 0;
+      while (completed < run.requested) {
+        const target = run.requested;
+        const signal = run.scope.signal;
+        signal.throwIfAborted();
+        const tasks = await this.listSummaries({
+          status: "open",
+          archived: "exclude",
+        });
+        const desired = (await desiredTaskTimers(tasks))
+          .sort((a, b) => Date.parse(a.fireAt) - Date.parse(b.fireAt))
+          .slice(0, MAX_REMINDER_TIMERS);
+        signal.throwIfAborted();
+        // Foreground refreshes ask often; resend an unchanged set only
+        // occasionally, to repair a set another device replaced.
+        const snapshot = JSON.stringify(desired);
+        const last = this.lastReminderTimers;
+        if (
+          last?.timers === timers &&
+          last.snapshot === snapshot &&
+          Date.now() - last.at < REMINDER_TIMER_RESEND_MS
+        ) {
+          completed = target;
+          continue;
+        }
+        // A full desired-state replace: retrying after an unknown outcome is
+        // safe, and timers of deleted or completed tasks are cancelled.
+        await timers.reconcile(
+          {
+            namespace: REMINDER_TIMER_NAMESPACE,
+            criterionId: REMINDER_TIMER_CRITERION,
+            timers: desired,
+          },
+          {
+            signal: AbortSignal.any([
+              signal,
+              AbortSignal.timeout(TASKNOTES_REQUEST_BUDGETS.backgroundMs),
+            ]),
+          },
+        );
+        this.lastReminderTimers = { timers, snapshot, at: Date.now() };
+        completed = target;
+      }
+    })().finally(() => {
+      if (this.reminderReconciliation === run)
+        this.reminderReconciliation = undefined;
+    });
+    this.reminderReconciliation = run;
+    return run.promise;
   }
 
   async listSummaries(
@@ -2892,23 +3027,75 @@ export class NextTaskRepository implements TaskRepository {
     return structuredClone(this.viewCatalog);
   }
   async listViews(): Promise<TaskViewDocument[]> {
-    return this.discoverNativeViews(this.signal());
+    return this.discoverNativeViews(this.lifetimeSignal());
   }
+  /** The replica keeps ONE discovery cursor per session, and a new discovery
+   * replaces it: the older pass's next page is refused as stale. Discovery
+   * also pages through every record, so on a relayed collection one pass is
+   * many round trips. Overlapping callers (navigation, its refresh when the
+   * change watch starts, a view execution after invalidation) therefore join
+   * the pass in flight rather than retiring each other until the foreground
+   * budget expires (#449). A joined pass stays current: every local data
+   * event retires its cut and it rereads before it resolves. */
   private async discoverNativeViews(
     signal: AbortSignal,
   ): Promise<TaskViewDocument[]> {
+    for (;;) {
+      signal.throwIfAborted();
+      if (!this.discovery) {
+        const pending = this.runNativeDiscovery(signal).finally(() => {
+          if (this.discovery?.pending === pending) this.discovery = null;
+        });
+        this.discovery = { pending, signal };
+      }
+      const run = this.discovery;
+      try {
+        const catalog = await untilAborted(run.pending, signal);
+        signal.throwIfAborted();
+        return structuredClone(catalog);
+      } catch (reason) {
+        signal.throwIfAborted();
+        // A shared pass belongs to its initiating caller. Only that caller's
+        // abort lets another caller start a pass under its own deadline;
+        // refusals and channel loss reach every caller unchanged.
+        if (
+          !run.signal.aborted ||
+          (reason !== run.signal.reason &&
+            (!(reason instanceof MdbaseError) || reason.code !== "cancelled"))
+        )
+          throw reason;
+        if (this.discovery === run) this.discovery = null;
+      }
+    }
+  }
+  private async runNativeDiscovery(
+    signal: AbortSignal,
+  ): Promise<TaskViewDocument[]> {
     return this.readCurrentGeneration(signal, async () => {
-      await this.initializeModel(signal);
+      // A fixed number of requests: one foreground deadline.
+      await this.initializeModel(this.requestSignal(signal));
       const revision = this.dataRevision;
       const descriptors = new Map<string, AppBasesDescriptor>();
       const documents = new Map<string, TaskViewDocument>();
       const timezone = runtimeTimezone();
+      const unreadable: UnreadableViewSource[] = [];
       for await (const views of iterateNativeDiscovery(async (continuation) => {
-        const result = await this.client.listAppBasesViews(
-          { captureTimezone: timezone, limit: 128, continuation },
-          { signal },
-        );
+        // Each page is one relayed round trip with its own deadline; the
+        // number of pages grows with the collection's size (#436).
+        const request = {
+          captureTimezone: timezone,
+          limit: 128,
+          continuation,
+          // One malformed view file must not hide every view. A replica that
+          // grants `bases-discovery-unreadable-v1` skips and names it; an
+          // older SDK or replica refuses the discovery as before.
+          reportUnreadable: true,
+        };
+        const result = await this.client.listAppBasesViews(request, {
+          signal: this.requestSignal(signal),
+        });
         if (result.kind === "refusal") throw new MdbaseError(result.problem);
+        unreadable.push(...unreadableViewSources(result));
         return result;
       }, signal)) {
         this.assertCurrentData(revision);
@@ -2957,6 +3144,21 @@ export class NextTaskRepository implements TaskRepository {
           });
         }
       }
+      for (const source of unreadable) {
+        if (documents.has(source.record)) continue;
+        documents.set(source.record, {
+          id: source.record,
+          name: source.path,
+          source: {
+            path: source.path,
+            revision: source.sourceRevision,
+            format: "obsidian.base",
+            writable: this.hasViewSourceGrant("records.edit"),
+          },
+          views: [],
+          unreadable: { reason: source.reason, detail: source.detail },
+        });
+      }
       signal.throwIfAborted();
       this.assertCurrentData(revision);
       this.nativeViews = descriptors;
@@ -2968,7 +3170,7 @@ export class NextTaskRepository implements TaskRepository {
       );
       for (const key of this.viewExecutions.keys())
         if (!live.has(key)) this.viewExecutions.delete(key);
-      return structuredClone(this.viewCatalog);
+      return this.viewCatalog;
     });
   }
   private viewExecutionSignature(view: TaskView, timezone: string): string {
@@ -3089,7 +3291,7 @@ export class NextTaskRepository implements TaskRepository {
     repairDefaults = true,
   ): Promise<TaskViewExecution> {
     return this.readCurrentGeneration(signal, async () => {
-      await this.initializeModel(signal);
+      await this.initializeModel(this.requestSignal(signal));
       signal.throwIfAborted();
       // A data push can invalidate discovery before the selected view reloads.
       // Rediscover through the original client, then enforce the same exact
@@ -3110,7 +3312,7 @@ export class NextTaskRepository implements TaskRepository {
       this.viewExecutions.set(view.key, slot);
       const selected = await this.readNativeSource(
         descriptor,
-        signal,
+        this.requestSignal(signal),
         timezone,
       );
       this.assertCurrentData(revision);
@@ -3121,7 +3323,7 @@ export class NextTaskRepository implements TaskRepository {
           captureTimezone: timezone,
           ...(window === undefined ? {} : { window }),
         },
-        { signal },
+        { signal: this.requestSignal(signal) },
       );
       if (result.kind === "refusal") {
         if (
@@ -3233,14 +3435,16 @@ export class NextTaskRepository implements TaskRepository {
       return normalized;
     });
   }
+  /** A view may have to rediscover first (any data event retires the
+   * catalog), so it is lifetime-owned and every request has its own deadline. */
   async executeView(view: TaskView): Promise<TaskViewExecution> {
-    return this.executeNativeView(view, this.signal());
+    return this.executeNativeView(view, this.lifetimeSignal());
   }
   async *iterateView(
     view: TaskView,
     options: { signal?: AbortSignal; cumulative?: boolean } = {},
   ): AsyncIterable<TaskViewExecution> {
-    const signal = this.signal(options.signal);
+    const signal = this.lifetimeSignal(options.signal);
     if (!options.cumulative) {
       yield await this.executeNativeView(view, signal);
       return;
@@ -3640,9 +3844,40 @@ export class NextTaskRepository implements TaskRepository {
   }
   private emit(kind: RepositoryChange["kind"]) {
     if (kind === "data") this.invalidateDataGeneration();
+    this.notify(kind);
+  }
+  /** Tells listeners without retiring the current data generation. */
+  private notify(kind: RepositoryChange["kind"]) {
     if (!this.disposed)
       this.listeners.forEach((listener) => listener({ kind }));
   }
+  /** The task model a refresh rereads, to tell whether it changed. */
+  private modelSignature(): string {
+    return JSON.stringify([
+      this.settingsType,
+      this.providers.map((provider) => [
+        provider.typeName,
+        provider.sourcePath,
+        provider.model.configuration(),
+      ]),
+    ]);
+  }
+}
+
+/** Settle with `pending`, or reject as soon as this caller's own signal
+ * aborts; a shared read keeps running for its other callers. */
+function untilAborted<Result>(
+  pending: Promise<Result>,
+  signal: AbortSignal,
+): Promise<Result> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<Result>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    pending.then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", abort);
+    });
+  });
 }
 
 function collectionChanged(): MdbaseError {

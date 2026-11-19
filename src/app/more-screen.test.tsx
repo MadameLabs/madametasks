@@ -26,6 +26,9 @@ const fixture = vi.hoisted(() => ({
   summaryError: null as Error | null,
   resume: null as ((event: { isActive: boolean }) => void) | null,
   remove: vi.fn(async () => undefined),
+  collectionUi: null as null | {
+    mdbase: { subscribe(listener: () => void): () => void };
+  },
 }));
 vi.mock("../native/mdbase-notifications", () => ({
   mdbaseNotifications: {
@@ -67,7 +70,7 @@ vi.mock("./repository-context", () => ({
 }));
 vi.mock("./collection-context", () => ({
   useCollectionGate: () => ({
-    collectionUi: null,
+    collectionUi: fixture.collectionUi,
     changeCollection: vi.fn(),
     reauthorizeCurrentCollection: fixture.reauthorize,
   }),
@@ -77,7 +80,9 @@ vi.mock("../pwa/install", () => ({
   requestPwaInstall: vi.fn(),
 }));
 vi.mock("../components/task-model-settings", () => ({
-  TaskModelSettingsEditor: () => <p>Task model editor</p>,
+  TaskModelSettingsEditor: ({ part }: { part: string }) => (
+    <p>Task model editor: {part}</p>
+  ),
 }));
 
 import { MoreScreen } from "./more-screen";
@@ -100,6 +105,7 @@ beforeEach(() => {
   fixture.summaryError = null;
   fixture.resume = null;
   fixture.remove.mockClear();
+  fixture.collectionUi = null;
   window.localStorage.clear();
   // jsdom has no layout, so it does not implement scrollIntoView.
   Element.prototype.scrollIntoView = () => undefined;
@@ -123,29 +129,42 @@ function settings(
   );
 }
 
-it("groups desktop settings by scope behind a section index", () => {
+it("shows one desktop section at a time beside a section index", () => {
   const onSection = vi.fn();
-  render(settings(undefined, onSection));
+  const view = render(settings(undefined, onSection));
   const index = screen.getByRole("navigation", { name: "Settings sections" });
   expect(
     within(index)
-      .getAllByRole("link")
-      .map((link) => link.textContent),
+      .getAllByRole("button")
+      .map((button) => button.textContent),
   ).toEqual([
     "Collection",
+    "Task properties",
+    "Workflow",
     "Reminders",
     "On this device",
-    "Collection behavior",
     "About & help",
   ]);
+  expect(
+    within(index).getByRole("button", { name: "Collection" }),
+  ).toHaveAttribute("aria-current", "page");
+  expect(screen.getByRole("region", { name: "Collection" })).toBeVisible();
+  expect(screen.queryByRole("region", { name: "Reminders" })).toBeNull();
+  // Storage is explained once, in the Collection disclosure.
+  expect(screen.queryByText("Where are my tasks saved?")).toBeNull();
+  fireEvent.click(within(index).getByRole("button", { name: "Reminders" }));
+  expect(onSection).toHaveBeenCalledWith("reminders", true);
+
+  view.rerender(settings("device", onSection));
   expect(screen.getByText("This device only")).toBeVisible();
+  expect(screen.queryByRole("region", { name: "Collection" })).toBeNull();
+  view.rerender(settings("properties", onSection));
   expect(
     screen.getByText("Shared with everyone using this collection"),
   ).toBeVisible();
-  // Storage is explained once, in the Collection disclosure.
-  expect(screen.queryByText("Where are my tasks saved?")).toBeNull();
-  fireEvent.click(within(index).getByRole("link", { name: "Reminders" }));
-  expect(onSection).toHaveBeenCalledWith("reminders", true);
+  expect(screen.getByText("Task model editor: properties")).toBeVisible();
+  view.rerender(settings("behavior", onSection));
+  expect(screen.getByText("Task model editor: behavior")).toBeVisible();
 });
 
 it("merges collection identity and connection into one card", () => {
@@ -164,7 +183,7 @@ it("merges collection identity and connection into one card", () => {
 });
 
 it("turns reminders on and off with one switch", async () => {
-  render(settings());
+  render(settings("reminders"));
   const reminders = await screen.findByRole("switch", {
     name: "Task reminders",
   });
@@ -181,12 +200,45 @@ it("delegates notification access review to the original SDK collection gate", a
     state: "reauthorization_required",
     optedIn: false,
   });
-  render(settings());
+  render(settings("reminders"));
   fireEvent.click(
     await screen.findByRole("button", { name: "Review notification access" }),
   );
   expect(fixture.reauthorize).toHaveBeenCalledOnce();
   expect(fixture.enable).not.toHaveBeenCalled();
+});
+
+it("rechecks reminders when approval finishes without a reload", async () => {
+  const listeners = new Set<() => void>();
+  fixture.collectionUi = {
+    mdbase: {
+      subscribe(listener) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+  };
+  fixture.status.mockResolvedValue({
+    state: "reauthorization_required",
+    optedIn: false,
+  });
+  render(settings("reminders"));
+  await screen.findByRole("button", { name: "Review notification access" });
+  // Subscribing and releasing both happen in passive effects, which can run
+  // after the screen they follow is already painted.
+  await waitFor(() => expect(listeners.size).toBe(1));
+
+  // Connect's popup granted timers to the open connection.
+  fixture.status.mockResolvedValue({ state: "off", optedIn: false });
+  act(() => listeners.forEach((listener) => listener()));
+  expect(
+    await screen.findByRole("switch", { name: "Task reminders" }),
+  ).not.toBeChecked();
+  expect(
+    screen.queryByRole("button", { name: "Review notification access" }),
+  ).toBeNull();
+  // Once approved, ordinary SDK updates no longer recheck.
+  await waitFor(() => expect(listeners.size).toBe(0));
 });
 
 it("does not load or authorize reminders without delivery authority", () => {
@@ -201,7 +253,7 @@ it("does not load or authorize reminders without delivery authority", () => {
 
 it("explains reminder failures before their technical detail", async () => {
   fixture.status.mockRejectedValueOnce(new Error("socket hang up"));
-  render(settings());
+  render(settings("reminders"));
   const alert = await screen.findByRole("alert");
   expect(alert).toHaveTextContent("Reminder setup could not finish.");
   expect(alert).not.toHaveTextContent("socket hang up");
@@ -212,22 +264,22 @@ it("lists categories on phones and opens each as its own page", async () => {
   fixture.narrow = true;
   const onSection = vi.fn();
   const view = render(settings(undefined, onSection));
-  expect(screen.queryByText("Task model editor")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: /Collection behavior/ }));
+  expect(screen.queryByText(/Task model editor/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /Workflow/ }));
   expect(onSection).toHaveBeenCalledWith("behavior");
 
   view.rerender(settings("behavior", onSection));
   expect(
-    screen.getByRole("heading", { level: 1, name: "Collection behavior" }),
+    screen.getByRole("heading", { level: 1, name: "Workflow" }),
   ).toBeVisible();
-  expect(screen.getByText("Task model editor")).toBeVisible();
+  expect(screen.getByText("Task model editor: behavior")).toBeVisible();
   expect(screen.queryByRole("region", { name: "Reminders" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Back to Settings" }));
   expect(onSection).toHaveBeenLastCalledWith(undefined, true);
 });
 
 it("offers installation once at the top and remembers dismissal", () => {
-  render(settings());
+  render(settings("about"));
   const banner = screen.getByRole("complementary", {
     name: "Install TaskNotes",
   });
@@ -255,11 +307,37 @@ it("remembers whether storage details are open", () => {
   ).toHaveAttribute("aria-expanded", "true");
 });
 
+it("links to mdbase from storage details and About", () => {
+  const view = render(settings());
+  fireEvent.click(screen.getByRole("button", { name: "How tasks are stored" }));
+  expect(
+    screen.getByRole("link", {
+      name: "Manage your collections in mdbase Connect",
+    }),
+  ).toHaveAttribute("href", "https://connect.mdbase.dev/");
+  view.rerender(settings("about"));
+  const about = screen.getByRole("region", { name: "About & help" });
+  const explore = within(about).getByRole("link", {
+    name: "Explore mdbase apps",
+  });
+  expect(explore).toHaveAttribute("href", "https://mdbase.dev/");
+  expect(explore).toHaveAttribute("target", "_blank");
+  expect(explore).toHaveAttribute("rel", "noopener noreferrer");
+});
+
+it("keeps mdbase links out of the iOS app", () => {
+  vi.spyOn(Capacitor, "isNativePlatform").mockReturnValue(true);
+  vi.spyOn(Capacitor, "getPlatform").mockReturnValue("ios");
+  render(settings());
+  fireEvent.click(screen.getByRole("button", { name: "How tasks are stored" }));
+  expect(screen.queryByRole("link", { name: /mdbase/ })).toBeNull();
+});
+
 it("offers retry after a failed permission check and only enables on explicit opt-in", async () => {
   fixture.status.mockRejectedValueOnce(
     new Error("Checking notification permission timed out. Try again."),
   );
-  render(settings());
+  render(settings("reminders"));
   expect(await screen.findByText("Setup needs attention")).toBeVisible();
   expect(screen.getByRole("alert")).toHaveTextContent(
     "Reminder setup could not finish.",
@@ -296,12 +374,12 @@ it("shows the collection name and actionable errors instead of zero counts", asy
     }),
   );
   expect(fixture.retrySummary).toHaveBeenCalledOnce();
-  await screen.findByRole("switch", { name: "Task reminders" });
+  await vi.waitFor(() => expect(fixture.status).toHaveBeenCalled());
 });
 
 it("rechecks native permissions on resume and removes its listener", async () => {
   vi.spyOn(Capacitor, "isNativePlatform").mockReturnValue(true);
-  const view = render(settings());
+  const view = render(settings("reminders"));
   await screen.findByRole("switch", { name: "Task reminders" });
   fixture.status.mockResolvedValueOnce({ state: "denied", optedIn: false });
   act(() => fixture.resume!({ isActive: true }));
@@ -312,7 +390,7 @@ it("rechecks native permissions on resume and removes its listener", async () =>
 
 it("ignores an old passive check after explicit enablement", async () => {
   vi.spyOn(Capacitor, "isNativePlatform").mockReturnValue(true);
-  render(settings());
+  render(settings("reminders"));
   const toggle = await screen.findByRole("switch", {
     name: "Task reminders",
   });
@@ -333,7 +411,7 @@ it("retains an actionable approval result from explicit registration", async () 
     state: "reauthorization_required",
     optedIn: false,
   });
-  render(settings());
+  render(settings("reminders"));
   fireEvent.click(
     await screen.findByRole("switch", { name: "Task reminders" }),
   );

@@ -123,6 +123,7 @@ it.each(["superseded", "cancelled", "unavailable"] as const)(
       const task = await f.repository.create({ title: "Original task" });
       vi.spyOn(f.client, "listAppBasesViews").mockResolvedValue({
         kind: "success",
+        unreadable: [],
         views: [],
         continuation: null,
         clock: { instant: 1, tz: "UTC", localDate: "1970-01-01" },
@@ -160,11 +161,12 @@ it.each(["superseded", "cancelled", "unavailable"] as const)(
       const navigation = f.repository.listViews();
       const detail = f.repository.get(task.id);
       // Both observeChanges calls install their original-owner cancellation
-      // listener before entering the held model read. No timing sleeps.
+      // listener before entering the held model read, and navigation also
+      // listens while it waits on the shared discovery pass. No timing sleeps.
       await vi.waitFor(() =>
         expect(
           observed.mock.calls.filter(([type]) => type === "abort"),
-        ).toHaveLength(2),
+        ).toHaveLength(3),
       );
       observed.mockRestore();
       if (outcome === "superseded") owner.abort();

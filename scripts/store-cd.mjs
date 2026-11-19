@@ -15,6 +15,7 @@ import {
 import { readAppleLive, playReviewBlock } from "./store-status.mjs";
 import { createStatusClient } from "./app-store-status.mjs";
 import { androidVersionCode } from "./publish-google-play.mjs";
+import { uploadRefusalReason } from "./testflight-upload-refusal.mjs";
 
 export const platforms = { "google-play": "android", "app-store": "ios" };
 // Mirrors mdbase-dev/mdbase-cloud-ops bin/lib/cd_retry.py STORE_INFRASTRUCTURE_REASONS at 224c0b0e7ca3bc7952fd468f16ffed08b7030c62.
@@ -309,11 +310,24 @@ export async function releaseTarget({ target, source, runId, save, services }) {
   await save({ version, outcome: "building", write_started: true });
   const buildWorkflow =
     platform === "android" ? "android.yml" : "ios-release.yml";
-  const sourceRunId = await services.dispatch(
-    buildWorkflow,
-    { source_sha: source, version },
-    save,
-  );
+  let sourceRunId;
+  try {
+    sourceRunId = await services.dispatch(
+      buildWorkflow,
+      { source_sha: source, version },
+      save,
+    );
+  } catch (error) {
+    // A failed iOS build run may retain a fixed TestFlight upload refusal
+    // class. It explains the stop but does not change it: the upload may
+    // already have reached Apple, so write evidence and the reason stay.
+    const reason =
+      platform === "ios" && error.runId && services.uploadRefusal
+        ? await services.uploadRefusal(error.runId)
+        : null;
+    if (reason) await save({ boundary_reason: reason });
+    throw error;
+  }
   const qualified = await services.qualify(platform, sourceRunId);
   requirePolicy(
     qualified.source === source && qualified.version === version,
@@ -334,15 +348,16 @@ export async function releaseTarget({ target, source, runId, save, services }) {
       save,
     );
   } catch (error) {
-    // Only a completed failed Play publisher whose bound receipt says its
-    // read-only recheck refused proves no Play write; anything else stays a stop.
-    const reason =
-      platform === "android" && error.runId
-        ? await services.refusal(error.runId, sourceRunId)
-        : null;
+    // Only a completed failed publisher whose bound receipt says it refused
+    // before any store write can name its reason; anything else stays a stop.
+    // The iOS TestFlight upload already counts as a write, so an App Store
+    // refusal keeps write_started and only records why the publisher refused.
+    const reason = error.runId
+      ? await services.refusal(error.runId, sourceRunId)
+      : null;
     if (!reason) throw error;
     await save({
-      write_started: false,
+      ...(platform === "android" ? { write_started: false } : {}),
       boundary_outcome: "refused-before-write",
     });
     throw new Error(reason, { cause: error });
@@ -372,15 +387,95 @@ async function status(platform, save) {
       "store-status-android.json",
     );
   }
-  return readAppleLive(
-    createStatusClient({
-      keyId: process.env.APP_STORE_CONNECT_KEY_ID,
-      issuerId: process.env.APP_STORE_CONNECT_ISSUER_ID,
-      privateKey: Buffer.from(
-        process.env.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 ?? "",
-        "base64",
-      ).toString("utf8"),
-    }),
+  return readAppleStatus(save, () =>
+    readAppleLive(
+      createStatusClient({
+        keyId: process.env.APP_STORE_CONNECT_KEY_ID,
+        issuerId: process.env.APP_STORE_CONNECT_ISSUER_ID,
+        privateKey: Buffer.from(
+          process.env.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 ?? "",
+          "base64",
+        ).toString("utf8"),
+      }),
+    ),
+  );
+}
+// The in-process App Store status read is read-only and runs before any store
+// write. Its own retries are exhausted by the time it throws, so transport
+// failures (timeout, network, HTTP 429/5xx) map onto the existing
+// store-status infrastructure reasons and retry quietly. Auth, config and
+// contract failures keep a step-specific slug and still stop the line.
+export const appleStatusBoundary = "app-store-status-read";
+const appleStatusTransport = new Map([
+  ["app-store-read-timeout", "store-status-timeout"],
+  ["app-store-read-network", "store-status-transport-failed"],
+]);
+const errorClasses = new Map([
+  ["TypeError", "typeerror"],
+  ["RangeError", "rangeerror"],
+  ["SyntaxError", "syntaxerror"],
+  ["Error", "error"],
+]);
+// HTTP 429 and 5xx persist only after the client's GET retries, so they are
+// provider unavailability; any other status (401, 403, 404, ...) stops.
+function appleStatusHttp(code) {
+  return code === "429" || code.startsWith("5")
+    ? "store-status-transport-unavailable"
+    : `app-store-status-read-http-${code}`;
+}
+export function appleStatusReason(error) {
+  const tagged =
+    boundedSlug(error?.refusal) ?? boundedSlug(error?.cause?.refusal);
+  if (tagged) {
+    const http = /^app-store-read-http-(\d{3})$/.exec(tagged);
+    if (http) return appleStatusHttp(http[1]);
+    return (
+      appleStatusTransport.get(tagged) ??
+      `app-store-status-${tagged.replace(/^app-store-/, "")}`
+    );
+  }
+  // The client's HTTP failure names only the status code we keep; the rest
+  // of its message (path, Apple error codes) never leaves the process.
+  const http = /^App Store Connect GET \S+: HTTP (\d{3}) /.exec(
+    typeof error?.message === "string" ? error.message : "",
+  );
+  if (http) return appleStatusHttp(http[1]);
+  return `app-store-status-read-failed-${errorClasses.get(error?.name) ?? "other"}`;
+}
+export async function readAppleStatus(save, read) {
+  await save({ boundary: appleStatusBoundary, boundary_outcome: "reading" });
+  let result;
+  try {
+    result = await read();
+  } catch (error) {
+    const reason = appleStatusReason(error);
+    await save({ boundary_outcome: "failed" });
+    throw Object.assign(new Error(reason), { refusal: reason });
+  }
+  await save({ boundary_outcome: "success" });
+  return result;
+}
+const slugPattern = /^[a-z0-9-]+$/;
+function boundedSlug(value) {
+  return typeof value === "string" && slugPattern.test(value) ? value : null;
+}
+// A bounded reason comes from a slug attached where the error was thrown, a
+// fixed policy message, or a slug on its direct cause, in that order. Anything
+// else is the fallback: messages that are not slugs never reach the receipt.
+export function failureReason(error, fallback = "store-evidence-unavailable") {
+  return (
+    boundedSlug(error?.refusal) ??
+    boundedSlug(error?.message) ??
+    boundedSlug(error?.cause?.refusal) ??
+    fallback
+  );
+}
+// Boundaries after which a pre-write policy stop is already known to precede
+// any store write.
+function settledStatusRead(receipt) {
+  return (
+    ["store-status.yml", appleStatusBoundary].includes(receipt.boundary) &&
+    receipt.boundary_outcome === "success"
   );
 }
 async function main() {
@@ -432,6 +527,20 @@ async function main() {
             return null;
           }
         },
+        uploadRefusal: async (runId) => {
+          try {
+            return uploadRefusalReason(
+              await artifactJson(
+                runId,
+                "testflight-upload-result",
+                "testflight-upload-result.json",
+              ),
+              runId,
+            );
+          } catch {
+            return null;
+          }
+        },
         result: async (runId, source) => {
           const result = await artifactJson(
             runId,
@@ -457,16 +566,13 @@ async function main() {
   }
 }
 export async function recordFailure(receipt, error, save, hold = storeLine) {
-  const reason = /^[a-z0-9-]+$/.test(error.message)
-    ? error.message
-    : "store-evidence-unavailable";
+  const reason = failureReason(error);
   await save({ outcome: "stopped", reason });
   if (
     reason === "app-line-stopped" &&
     receipt.write_started === false &&
     (!receipt.boundary ||
-      (receipt.boundary === "store-status.yml" &&
-        receipt.boundary_outcome === "success") ||
+      settledStatusRead(receipt) ||
       (receipt.target === "google-play" &&
         receipt.boundary === "android.yml" &&
         receipt.boundary_outcome === "success"))
@@ -475,9 +581,7 @@ export async function recordFailure(receipt, error, save, hold = storeLine) {
   if (
     reason === "exact-main-ci-required" &&
     receipt.write_started === false &&
-    (!receipt.boundary ||
-      (receipt.boundary === "store-status.yml" &&
-        receipt.boundary_outcome === "success"))
+    (!receipt.boundary || settledStatusRead(receipt))
   )
     return;
   if (
@@ -539,9 +643,7 @@ if (
   operation().catch((error) => {
     if (process.argv[2] === "build") {
       // Only fixed policy reasons; never command stderr or response bodies.
-      const reason = /^[a-z0-9-]+$/.test(error.message)
-        ? error.message
-        : "release-evidence-unavailable";
+      const reason = failureReason(error, "release-evidence-unavailable");
       console.error(`Store CD refused: ${reason}`);
     } else {
       console.error("Store CD refused; inspect the bounded outcome.");

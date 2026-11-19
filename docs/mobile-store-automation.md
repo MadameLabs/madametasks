@@ -75,7 +75,11 @@ The coordinator allocates a numeric marketing version strictly newer than the
 observed live version (next patch, or a greater package version). With the
 2026-11-09 status snapshot's package/live **1.0.12**, the first new submission is
 **1.0.13** on each store. The signed build receives that version; no product
-manifest edit or release tag is necessary. Android version codes remain the
+manifest edit or release tag is necessary. The bundled web build takes the same
+version and its source commit from `TASKNOTES_STORE_VERSION` and
+`TASKNOTES_STORE_SOURCE`, so More → About and the feedback report's
+`build_revision` read `1.0.45-602fa92ec588`, never the frozen package.json
+version (#492). Android version codes remain the
 fixed configured base plus the Android workflow run number and must exceed all
 store artifact codes. iOS build numbers remain the iOS release run number.
 A retained successful same-source/live-version receipt makes subsequent ticks
@@ -128,6 +132,44 @@ the exact signed source run, and record `write_started: false`,
 reason then follows the retry rule above; any other reason still stops the line.
 A missing, extra-field or mismatched receipt keeps `write_started: true` and the
 `store-build-or-publication-failed` stop.
+
+The App Store submitter retains the same bounded receipt when it refuses before
+attempting any App Store Connect write (every non-GET request counts as an
+attempt, even one that never reaches Apple). Its reason is a fixed slug such as
+`app-store-build-not-eligible`, `app-store-build-processing-timeout` or
+`app-store-version-needs-attention-<state>`; messages and response bodies never
+leave the job. The coordinator records `boundary_outcome: refused-before-write`
+and that reason, but keeps `write_started: true` because the TestFlight upload
+is already a store write, so the line still stops with
+`app-publication-failed`. A failure after a write attempt retains nothing.
+
+App Store Connect, not altool's wording, confirms a TestFlight upload. After
+altool exits 0, `scripts/testflight-upload.mjs confirm` polls the API (about
+ten minutes) for the exact build: the TaskNotes app and bundle id, the marketing
+version and the build number. A listed build is success even when altool's
+success phrase is missing; "No errors uploading" and "UPLOAD SUCCEEDED" are only
+hints. A non-zero altool exit keeps the log-based classification. Before signing,
+`testflight-upload.mjs preflight` refuses with `testflight-build-number-taken`
+when App Store Connect already holds this or a higher build for the version. The
+build number is the release run number and reruns are refused, so a retry after
+an unconfirmed upload is a new dispatch with a higher build number.
+
+When `ios-release.yml` cannot confirm a TestFlight upload, the altool log stays
+on the runner because it can name the team, key and delivery. The job prints and
+retains only `{outcome: "testflight-upload-refused", reason, run_id}` as
+`testflight-upload-result`. The reason is a fixed class:
+`testflight-build-number-duplicate`, `testflight-version-train-closed`,
+`testflight-upload-limit`, `testflight-agreement-required`,
+`testflight-auth-refused`, `testflight-service-unavailable`,
+`testflight-transport`, `testflight-validation-itms-<code>`,
+`testflight-build-not-visible`, `testflight-build-lookup-failed`,
+`testflight-build-number-taken`, `testflight-upload-log-missing` or
+`testflight-upload-unclassified`. Receipts from older runs may still carry
+`testflight-success-unconfirmed`. For a failed `ios-release.yml` run, the
+coordinator reads the receipt bound to that exact run and saves it as
+`boundary_reason`. The upload may already have reached Apple, so
+`write_started: true`, the `store-build-or-publication-failed` reason and the
+`app-publication-failed` stop do not change.
 
 A failed build, upload, signing/digest check, rejected review, or unknown dispatch stops the
 selected store through those existing `app-stop` records. Unknown child writes

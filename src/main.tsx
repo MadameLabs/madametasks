@@ -3,6 +3,7 @@ import "@fontsource/atkinson-hyperlegible/700.css";
 import "@fontsource/azeret-mono/500.css";
 import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
+import { Capacitor } from "@capacitor/core";
 
 import { Trans } from "@lingui/react/macro";
 import { AppI18nProvider } from "./i18n/app-provider";
@@ -12,11 +13,13 @@ import {
   isAppGrantReturn,
 } from "./cloud/app-grant-return";
 import { FeedbackRoot } from "./app/feedback-root";
+import { nativeGrantHandoff } from "./native/grant-return";
 import { AppErrorBoundary } from "./components/app-error-boundary";
 import { AppUpdateNotice } from "./components/app-update-notice";
 import { ReturningUserNotice } from "./components/returning-user-notice";
 import { initializePwaInstall } from "./pwa/install";
 import { initializePwaUpdate } from "./pwa/update";
+import { captureTodoistReturn } from "./cloud/todoist-return";
 import {
   clearTaskNotesServiceWorkerForDevelopment,
   registerTaskNotesServiceWorker,
@@ -28,8 +31,26 @@ import "./accessibility.css";
 // The Private collection grant window returns here: hand its result to the
 // waiting original SDK owner, without starting a second mdbase owner. That owner
 // closes this SAME popup only after verified completion and original custody ACK.
+captureTodoistReturn(new URL(window.location.href));
 const grantReturn = isAppGrantReturn(new URL(window.location.href));
-if (grantReturn) {
+// A grant the Android app asked for opens here in the system browser: hand it
+// back to the app, which is waiting for it (#492).
+const appHandoff =
+  grantReturn && !Capacitor.isNativePlatform()
+    ? nativeGrantHandoff(new URL(window.location.href))
+    : null;
+if (appHandoff) {
+  window.location.replace(appHandoff);
+  createRoot(document.getElementById("root")!).render(
+    <AppI18nProvider>
+      <main className="opening-screen">
+        <a href={appHandoff}>
+          <Trans>Return to the TaskNotes app</Trans>
+        </a>
+      </main>
+    </AppI18nProvider>,
+  );
+} else if (grantReturn) {
   void deliverAppGrantReturn(new URL(window.location.href)).catch(
     () => undefined,
   );

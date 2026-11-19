@@ -23,6 +23,18 @@ Success means that capture, review, editing, and completion are clear and
 dependable; collection availability is understandable; and users continue to
 trust that their information is portable beyond the application.
 
+## Importing existing tasks
+
+The web app provides Todoist import at `/import` and under Settings → Collection.
+It reuses the selected collection and the app's connection/setup flow. Import is
+a reviewed, one-way migration of active tasks, not synchronization: Todoist is
+read-only, existing destination records are never overwritten, and unsupported
+conversions block rather than silently dropping meaning. Users explicitly map
+priorities and dates, review Markdown and the destination, then approve creates.
+Cancellation stops after the captured write settles; uncertain results require
+checking the original mutation, never replay. Native users use web import until
+native OAuth has been qualified.
+
 ## Brand Personality
 
 Practical, portable, and quietly precise. The application should feel
@@ -58,9 +70,12 @@ scrolls to and focuses the overdue section. Phone rows keep the title and
 compact supporting metadata together; a separate properties control opens the
 editable property sheet instead of crowding the row with individual controls.
 
-Task detail puts editable status, priority, Scheduled, Due and project chips
-below the title, then Notes, Subtasks and Attachments. More properties starts
-collapsed without removing secondary or custom fields. Attachments accept files
+Task detail puts one property list below the title: status, priority,
+Scheduled, Due and project always, and every other property, including custom
+fields, once it has a value. Empty ones are one step away under Add property,
+so a task shows what it actually uses. Notes follow as one reading-and-editing
+surface, then Subtasks and Attachments, which stay a single row of actions
+until the task has some. Attachments accept files
 the collection supports; safe raster images retain previews and Insert, while
 other files, including SVG, are download-only. Detach keeps the collection file.
 

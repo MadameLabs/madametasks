@@ -17,11 +17,21 @@ const submittedStates = new Set([
   "PENDING_DEVELOPER_RELEASE",
 ]);
 
-function requireValue(value, label) {
+// A refusal carries a fixed slug chosen where it is thrown, so the bounded
+// receipt never depends on (or reveals) the message text.
+function refuse(message, reason, options) {
+  return Object.assign(new Error(message, options), { refusal: reason });
+}
+const CONFIG_MISSING = "app-store-config-missing";
+const METADATA_INVALID = "app-store-metadata-invalid";
+
+function requireValue(value, label, reason = CONFIG_MISSING) {
   if (typeof value !== "string" || !value.trim())
-    throw new Error(`${label} is required`);
+    throw refuse(`${label} is required`, reason);
   return value.trim();
 }
+
+const invalidMetadata = (message) => refuse(message, METADATA_INVALID);
 
 export function releaseTypeOf() {
   return "AFTER_APPROVAL";
@@ -29,37 +39,49 @@ export function releaseTypeOf() {
 
 export function validateMetadata(metadata, version) {
   if (!/^\d+\.\d+\.\d+$/.test(version))
-    throw new Error("Public releases require a three-part numeric version");
+    throw invalidMetadata(
+      "Public releases require a three-part numeric version",
+    );
   if (metadata.version !== version)
-    throw new Error("Release metadata version does not match the build");
+    throw invalidMetadata("Release metadata version does not match the build");
   if (metadata.draft !== undefined)
-    throw new Error("Release metadata is still marked as a draft");
+    throw invalidMetadata("Release metadata is still marked as a draft");
   if (
     metadata.releaseType !== undefined &&
     metadata.releaseType !== "AFTER_APPROVAL"
   )
-    throw new Error("releaseType must be AFTER_APPROVAL");
-  requireValue(metadata.copyright, "copyright");
-  const reviewNotes = requireValue(metadata.reviewNotes, "reviewNotes");
+    throw invalidMetadata("releaseType must be AFTER_APPROVAL");
+  requireValue(metadata.copyright, "copyright", METADATA_INVALID);
+  const reviewNotes = requireValue(
+    metadata.reviewNotes,
+    "reviewNotes",
+    METADATA_INVALID,
+  );
   if (reviewNotes.length > 4000)
-    throw new Error("Review notes exceed 4000 characters");
+    throw invalidMetadata("Review notes exceed 4000 characters");
   if (
     !metadata.whatsNew ||
     typeof metadata.whatsNew !== "object" ||
     Array.isArray(metadata.whatsNew)
   ) {
-    throw new Error("whatsNew must map each store locale to release notes");
+    throw invalidMetadata(
+      "whatsNew must map each store locale to release notes",
+    );
   }
   const locales = Object.keys(metadata.whatsNew);
-  if (!locales.length) throw new Error("At least one store locale is required");
+  if (!locales.length)
+    throw invalidMetadata("At least one store locale is required");
   for (const locale of locales) {
     if (!/^[a-z]{2,3}(?:-[A-Za-z0-9]+)*$/.test(locale))
-      throw new Error("Invalid store locale");
+      throw invalidMetadata("Invalid store locale");
     if (
-      requireValue(metadata.whatsNew[locale], `whatsNew.${locale}`).length >
-      4000
+      requireValue(
+        metadata.whatsNew[locale],
+        `whatsNew.${locale}`,
+        METADATA_INVALID,
+      ).length > 4000
     ) {
-      throw new Error("Release notes exceed 4000 characters");
+      throw invalidMetadata("Release notes exceed 4000 characters");
     }
   }
   return metadata;
@@ -76,11 +98,64 @@ export function createToken({ keyId, issuerId, privateKey }, now = Date.now()) {
       aud: "appstoreconnect-v1",
     },
   )}`;
-  const signature = sign("sha256", Buffer.from(unsigned), {
-    key: privateKey,
-    dsaEncoding: "ieee-p1363",
-  });
+  let signature;
+  try {
+    signature = sign("sha256", Buffer.from(unsigned), {
+      key: privateKey,
+      dsaEncoding: "ieee-p1363",
+    });
+  } catch (error) {
+    throw refuse(
+      "App Store Connect API key could not sign a token",
+      "app-store-auth-key-invalid",
+      { cause: error },
+    );
+  }
   return `${unsigned}.${signature.toString("base64url")}`;
+}
+
+// Undici reports connection failures as TypeError("fetch failed") whose cause
+// carries a code; a hung read ends in the timeout signal's TimeoutError.
+const timeoutNames = new Set(["TimeoutError", "AbortError"]);
+const networkCodes = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ECONNABORTED",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ETIMEDOUT",
+  "EPIPE",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+]);
+function transportFailure(error) {
+  const chain = [error, error?.cause].filter(Boolean);
+  if (
+    chain.some(
+      (item) =>
+        timeoutNames.has(item.name) ||
+        item.code === "UND_ERR_CONNECT_TIMEOUT" ||
+        item.code === "UND_ERR_HEADERS_TIMEOUT" ||
+        item.code === "UND_ERR_BODY_TIMEOUT",
+    )
+  )
+    return {
+      message: "App Store Connect read timed out",
+      reason: "app-store-read-timeout",
+    };
+  if (
+    error?.name === "TypeError" ||
+    chain.some(
+      (item) =>
+        (typeof item.code === "string" && item.code.startsWith("UND_ERR_")) ||
+        networkCodes.has(item.code),
+    )
+  )
+    return {
+      message: "App Store Connect read failed on the network",
+      reason: "app-store-read-network",
+    };
+  return null;
 }
 
 export function createClient(
@@ -94,27 +169,49 @@ export function createClient(
       url.origin !== new URL(API).origin ||
       !url.pathname.startsWith("/v1/")
     ) {
-      throw new Error("Unexpected App Store Connect URL");
+      throw refuse(
+        "Unexpected App Store Connect URL",
+        "app-store-pagination-url-unexpected",
+      );
     }
     for (let attempt = 0; ; attempt++) {
-      const response = await fetchImpl(url, {
-        method,
-        redirect: "error",
-        signal: AbortSignal.timeout(60_000),
-        headers: {
-          authorization: `Bearer ${createToken(credentials)}`,
-          "content-type": "application/json",
-        },
-        body: data === undefined ? undefined : JSON.stringify({ data }),
-      });
       // Writes are not blindly retried: rerun the job to reconcile actual server state.
-      if (
-        method === "GET" &&
-        attempt < 4 &&
-        (response.status === 429 || response.status >= 500)
-      ) {
-        await sleepImpl(1000 * 2 ** attempt);
-        continue;
+      const retriable = method === "GET" && attempt < 4;
+      const authorization = `Bearer ${createToken(credentials)}`;
+      let response;
+      let body;
+      try {
+        response = await fetchImpl(url, {
+          method,
+          redirect: "error",
+          signal: AbortSignal.timeout(60_000),
+          headers: {
+            authorization,
+            "content-type": "application/json",
+          },
+          body: data === undefined ? undefined : JSON.stringify({ data }),
+        });
+        if (retriable && (response.status === 429 || response.status >= 500)) {
+          await sleepImpl(1000 * 2 ** attempt);
+          continue;
+        }
+        if (response.ok && response.status !== 204)
+          body = await response.json();
+      } catch (error) {
+        if (response?.ok && error?.name === "SyntaxError")
+          throw refuse(
+            "App Store Connect response was not valid JSON",
+            "app-store-read-unparseable",
+            { cause: error },
+          );
+        const failure = transportFailure(error);
+        if (!failure) throw error;
+        if (retriable) {
+          await sleepImpl(1000 * 2 ** attempt);
+          continue;
+        }
+        if (method !== "GET") throw error;
+        throw refuse(failure.message, failure.reason, { cause: error });
       }
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
@@ -124,14 +221,18 @@ export function createClient(
           `App Store Connect ${method} ${url.pathname}: HTTP ${response.status} (${codes}). Check the listing in App Store Connect; no automatic cancellation or replacement was attempted.`,
         );
       }
-      return response.status === 204 ? {} : response.json();
+      return response.status === 204 ? {} : body;
     }
   }
   async function list(path) {
     const result = [];
     const seen = new Set();
     while (path) {
-      if (seen.has(path)) throw new Error("Repeated pagination URL");
+      if (seen.has(path))
+        throw refuse(
+          "Repeated pagination URL",
+          "app-store-pagination-repeated",
+        );
       seen.add(path);
       const page = await request(path);
       result.push(...page.data);
@@ -535,7 +636,8 @@ export function generatedMetadata(template, version) {
     /HOW TO REVIEW\n([\s\S]*?)(?:\nWHAT CHANGED|\nWHAT THE APP DOES|$)/
       .exec(template.reviewNotes)?.[1]
       ?.trim();
-  if (!instructions) throw new Error("No reviewed store instructions template");
+  if (!instructions)
+    throw invalidMetadata("No reviewed store instructions template");
   return validateMetadata(
     {
       version,
@@ -553,10 +655,21 @@ export function generatedMetadata(template, version) {
   );
 }
 
+async function readMetadataFile(path) {
+  const text = await readFile(path, "utf8");
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw refuse("Release metadata is not valid JSON", METADATA_INVALID, {
+      cause: error,
+    });
+  }
+}
+
 async function releaseMetadata(version) {
   try {
     return validateMetadata(
-      JSON.parse(await readFile(`docs/releases/ios/${version}.json`, "utf8")),
+      await readMetadataFile(`docs/releases/ios/${version}.json`),
       version,
     );
   } catch (error) {
@@ -569,43 +682,156 @@ async function releaseMetadata(version) {
         return bb[0] - aa[0] || bb[1] - aa[1] || bb[2] - aa[2];
       });
     if (!templates.length)
-      throw new Error("No reviewed store metadata template", { cause: error });
+      throw refuse("No reviewed store metadata template", METADATA_INVALID, {
+        cause: error,
+      });
     return generatedMetadata(
-      JSON.parse(await readFile(`docs/releases/ios/${templates[0]}`, "utf8")),
+      await readMetadataFile(`docs/releases/ios/${templates[0]}`),
       version,
     );
   }
 }
 
-async function main() {
+// Fixed refusal reasons for failures that happen before any App Store Connect
+// write. Only these bounded slugs leave the job; messages and response bodies
+// stay in the process.
+const refusalReasons = [
+  [
+    "Timed out waiting for the exact build",
+    "app-store-build-processing-timeout",
+  ],
+  ["Selected build is invalid", "app-store-build-invalid"],
+  ["Build needs App Store eligibility", "app-store-build-not-eligible"],
+  ["Multiple builds matched", "app-store-build-ambiguous"],
+  ["Expected a positive build number", "app-store-build-number-invalid"],
+  ["Unexpected app bundle ID", "app-store-bundle-mismatch"],
+  [
+    "This workflow updates an existing public app",
+    "app-store-no-public-version",
+  ],
+  [
+    "Store version is attached to a different build",
+    "app-store-version-build-mismatch",
+  ],
+  [
+    "Existing submitted version does not match",
+    "app-store-submitted-version-policy-mismatch",
+  ],
+  [
+    "Saved app review credentials do not match",
+    "app-store-review-account-mismatch",
+  ],
+  [
+    "App review credentials require both",
+    "app-store-review-account-config-invalid",
+  ],
+  ["Release notes must cover exactly", "app-store-locales-mismatch"],
+  [
+    "App review contact information is incomplete",
+    "app-store-review-contact-incomplete",
+  ],
+  [
+    "Draft review submission contains unrelated items",
+    "app-store-draft-submission-unrelated",
+  ],
+  [
+    "Saved release metadata/build does not match",
+    "app-store-saved-state-mismatch",
+  ],
+  ["A phased release is configured", "app-store-phased-release-configured"],
+];
+
+// Slugs attached where an error is thrown (see refuse()).
+const taggedReasons = new Set([
+  CONFIG_MISSING,
+  METADATA_INVALID,
+  "app-store-read-timeout",
+  "app-store-read-network",
+  "app-store-read-unparseable",
+  "app-store-pagination-url-unexpected",
+  "app-store-pagination-repeated",
+  "app-store-auth-key-invalid",
+]);
+// Unrecognised failures name only a fixed error class, never the message.
+const errorClasses = new Map([
+  ["TypeError", "typeerror"],
+  ["RangeError", "rangeerror"],
+  ["SyntaxError", "syntaxerror"],
+  ["Error", "error"],
+]);
+
+export function refusalReason(error) {
+  if (taggedReasons.has(error?.refusal)) return error.refusal;
+  const message = typeof error?.message === "string" ? error.message : "";
+  const attention =
+    /^Store version needs manual attention: ([A-Z][A-Z0-9_]{0,63})$/.exec(
+      message,
+    );
+  if (attention)
+    return `app-store-version-needs-attention-${attention[1].toLowerCase().replaceAll("_", "-")}`;
+  const read = /^App Store Connect GET \S+: HTTP (\d{3}) /.exec(message);
+  if (read) return `app-store-read-http-${read[1]}`;
+  return (
+    refusalReasons.find(([prefix]) => message.startsWith(prefix))?.[1] ??
+    `app-store-precheck-refused-${errorClasses.get(error?.name) ?? "other"}`
+  );
+}
+
+// Count every request that is not a GET before it leaves the process, so a
+// refusal can prove that no App Store Connect write was even attempted.
+export function trackWrites(client) {
+  const tracked = {
+    writeAttempted: false,
+    request(path, method = "GET", data) {
+      if (method !== "GET") tracked.writeAttempted = true;
+      return client.request(path, method, data);
+    },
+    list: (path) => client.list(path),
+  };
+  return tracked;
+}
+
+// Retain a bounded receipt only while no write was attempted, matching the
+// Play recheck. After any write attempt nothing is retained, so the
+// coordinator keeps its write-started stop.
+export async function refusalReceipt(error, client, sourceRunId) {
+  if (client && client.writeAttempted !== false) return null;
+  const { recheckRefusal } = await import("./mobile-release-policy.mjs");
+  return recheckRefusal(refusalReason(error), sourceRunId);
+}
+
+async function main(tracker) {
   const version = requireValue(
     process.env.TASKNOTES_IOS_VERSION,
     "TASKNOTES_IOS_VERSION",
   );
   if (!/^\d+\.\d+\.\d+$/.test(version))
-    throw new Error("Invalid public release version");
+    throw invalidMetadata("Invalid public release version");
   const metadata = {
     ...(await releaseMetadata(version)),
     releaseType: "AFTER_APPROVAL",
   };
   if (process.argv.includes("--validate")) return;
-  const client = createClient({
-    keyId: requireValue(
-      process.env.APP_STORE_PUBLISH_KEY_ID,
-      "APP_STORE_PUBLISH_KEY_ID",
-    ),
-    issuerId: requireValue(
-      process.env.APP_STORE_PUBLISH_ISSUER_ID,
-      "APP_STORE_PUBLISH_ISSUER_ID",
-    ),
-    privateKey: Buffer.from(
-      requireValue(
-        process.env.APP_STORE_PUBLISH_PRIVATE_KEY_BASE64,
-        "APP_STORE_PUBLISH_PRIVATE_KEY_BASE64",
+  const client = trackWrites(
+    createClient({
+      keyId: requireValue(
+        process.env.APP_STORE_PUBLISH_KEY_ID,
+        "APP_STORE_PUBLISH_KEY_ID",
       ),
-      "base64",
-    ).toString("utf8"),
-  });
+      issuerId: requireValue(
+        process.env.APP_STORE_PUBLISH_ISSUER_ID,
+        "APP_STORE_PUBLISH_ISSUER_ID",
+      ),
+      privateKey: Buffer.from(
+        requireValue(
+          process.env.APP_STORE_PUBLISH_PRIVATE_KEY_BASE64,
+          "APP_STORE_PUBLISH_PRIVATE_KEY_BASE64",
+        ),
+        "base64",
+      ).toString("utf8"),
+    }),
+  );
+  tracker.client = client;
   const result = await submitAppStore({
     client,
     version,
@@ -638,7 +864,8 @@ if (
   process.argv[1] &&
   fileURLToPath(import.meta.url) === resolve(process.argv[1])
 ) {
-  main().catch(async (error) => {
+  const tracker = {};
+  main(tracker).catch(async (error) => {
     if (error.message === "earlier-store-version-in-flight") {
       const qualified = JSON.parse(
         await readFile("mobile-release-qualified.json", "utf8"),
@@ -651,10 +878,25 @@ if (
         }) + "\n",
       );
     } else {
-      console.error(
-        "App Store submission refused; inspect the target outcome.",
-      );
       process.exitCode = 1;
+      const receipt = await refusalReceipt(
+        error,
+        tracker.client,
+        process.env.SOURCE_RUN_ID,
+      );
+      if (receipt) {
+        console.error(
+          `App Store submission refused before any write: ${receipt.reason}`,
+        );
+        await writeFile(
+          "store-target-result.json",
+          JSON.stringify(receipt) + "\n",
+        ).catch(() => {});
+      } else {
+        console.error(
+          "App Store submission refused; inspect the target outcome.",
+        );
+      }
     }
   });
 }

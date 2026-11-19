@@ -2,7 +2,7 @@ import { TaskSelectionProvider } from "./task-selection";
 import { useLingui as useI18n } from "@lingui/react";
 import { useLingui } from "@lingui/react/macro";
 import { Trans } from "@lingui/react/macro";
-import { t as translate } from "@lingui/core/macro";
+import { plural, t as translate } from "@lingui/core/macro";
 import {
   ClockAlert,
   PanelLeftClose,
@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import {
   useCallback,
+  lazy,
+  Suspense,
   useContext,
   useEffect,
   useId,
@@ -114,7 +116,10 @@ import {
 } from "./navigation-views";
 import { transitionSidebar } from "./navigation-transition";
 import { TaskScreen, warmMarkdownPreview } from "./task-screen";
-import { useNavigationViews } from "./use-navigation-views";
+import {
+  useNavigationViews,
+  type ViewDiscoveryFailure,
+} from "./use-navigation-views";
 import { useAddStarterViews } from "./use-starter-views";
 import { ViewsScreen } from "./views-screen";
 import { warmCalendarView } from "./views/calendar-view-presentation";
@@ -132,6 +137,12 @@ import type { OperationalError } from "../application/operational-error";
 
 // MadameTasks: nome próprio da marca, fora do catálogo de tradução.
 const BRAND_NAME = "MadameTasks";
+
+const ImportScreen = lazy(() =>
+  import("./import-screen").then((module) => ({
+    default: module.ImportScreen,
+  })),
+);
 
 export function AppShell() {
   const { t } = useLingui();
@@ -187,6 +198,8 @@ export function AppShell() {
     documents,
     views,
     discovery,
+    discoveryFailure,
+    unreadableViewPaths,
     refreshing: discoveringViews,
     navigationViews,
     navigationKeys,
@@ -337,8 +350,7 @@ export function AppShell() {
   }, []);
 
   useEffect(() => {
-    // The next entry has no reminder authority. Do not load a legacy owner or
-    // register/listen to notifications just because its workspace rendered.
+    // Only collections whose reminders mdbase delivers listen for wake-ups.
     if (reminderAuthority !== "connect") return;
     let active = true;
     let stop: (() => void) | undefined;
@@ -424,6 +436,8 @@ export function AppShell() {
   const discoveryNotice = (
     <ViewDiscoveryNotice
       outcome={discovery}
+      failure={discoveryFailure}
+      unreadablePaths={unreadableViewPaths}
       refreshing={discoveringViews}
       onRetry={() => void refreshViews()}
       onStarterViewsAdded={refreshViews}
@@ -538,8 +552,13 @@ export function AppShell() {
           <ScratchpadScreen
             onOpenTask={(task) => navigate({ page: "task", id: task.id })}
           />
+        ) : workspacePage === "import" ? (
+          <Suspense fallback={<LoadingRows />}>
+            <ImportScreen />
+          </Suspense>
         ) : workspacePage === "more" ? (
           <MoreScreen
+            onImport={() => navigate({ page: "import" })}
             calendarPreferences={calendarPreferences}
             section={workspace.page === "more" ? workspace.section : undefined}
             onCalendarPreferencesChange={updateCalendarPreferences}
@@ -750,12 +769,18 @@ export function AppShell() {
 
 export function ViewDiscoveryNotice({
   outcome,
+  failure = null,
+  unreadablePaths = [],
   refreshing,
   onRetry,
   onCreate,
   onStarterViewsAdded,
 }: {
   outcome: "loading" | "ok" | "empty" | "error";
+  failure?: ViewDiscoveryFailure | null;
+  /** Files discovery skipped (whether they hold views is unknown); named
+   * instead of the empty-views notice. */
+  unreadablePaths?: readonly string[];
   refreshing: boolean;
   onRetry(): void;
   onCreate(): void;
@@ -765,6 +790,8 @@ export function ViewDiscoveryNotice({
   const waitingForComputer =
     useContext(ConnectionNoticeContext) === "waiting_for_computer";
   if (waitingForComputer && outcome === "error") return null;
+  if ((outcome === "ok" || outcome === "empty") && unreadablePaths.length)
+    return <UnreadableViewsNotice paths={unreadablePaths} />;
   if (outcome === "empty" && onStarterViewsAdded)
     return (
       <EmptyViewsNotice
@@ -781,9 +808,14 @@ export function ViewDiscoveryNotice({
       aria-busy={refreshing}
     >
       <p role={outcome === "error" ? "alert" : "status"}>
-        {outcome === "error"
-          ? translate({ message: "Couldn't load your views." })
-          : translate({ message: "No views yet." })}
+        {outcome !== "error"
+          ? translate({ message: "No views yet." })
+          : failure === "unreadable_source"
+            ? translate({
+                message:
+                  "Couldn't load your views because a file in this collection can't be read.",
+              })
+            : translate({ message: "Couldn't load your views." })}
       </p>
       <button
         className="text-action"
@@ -797,6 +829,33 @@ export function ViewDiscoveryNotice({
             : translate({ message: "Retry" })
           : translate({ message: "Create a view" })}
       </button>
+    </section>
+  );
+}
+
+/** Discovery skipped these files: any record it cannot read, plain notes
+ * included, since it cannot tell whether one held views. Every other view
+ * still loaded. The notice
+ * clears itself when a fixed file is rediscovered on the next data change. */
+function UnreadableViewsNotice({ paths }: { paths: readonly string[] }) {
+  return (
+    <section
+      className="view-discovery-notice"
+      aria-label={translate({ message: "Views availability" })}
+    >
+      <p role="status">
+        {plural(paths.length, {
+          1: "Couldn't read this file, so any views in it aren't shown:",
+          other: "Couldn't read # files, so any views in them aren't shown:",
+        })}
+      </p>
+      <ul className="view-discovery-sources">
+        {paths.map((path) => (
+          <li key={path} translate="no">
+            {path}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

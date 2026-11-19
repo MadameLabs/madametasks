@@ -1,13 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   APP_ID,
   BUNDLE_ID,
   createClient,
   createToken,
+  refusalReason,
+  refusalReceipt,
   submitAppStore,
+  trackWrites,
   validateMetadata,
   waitForBuild,
 } from "./submit-app-store.mjs";
@@ -634,4 +641,325 @@ test("retries transient reads but not writes; redacts error details", async () =
   calls = 0;
   await assert.rejects(client.request("appStoreVersions", "POST", {}));
   assert.equal(calls, 1);
+});
+
+test("pre-write refusals map to fixed bounded reasons", () => {
+  for (const [message, reason] of [
+    [
+      "Build needs App Store eligibility or an export-compliance declaration; resolve in App Store Connect",
+      "app-store-build-not-eligible",
+    ],
+    [
+      "Timed out waiting for the exact build to finish processing; rerun only the submission job later",
+      "app-store-build-processing-timeout",
+    ],
+    [
+      "Store version needs manual attention: DEVELOPER_REJECTED",
+      "app-store-version-needs-attention-developer-rejected",
+    ],
+    [
+      "App Store Connect GET /v1/builds: HTTP 401 (NOT_AUTHORIZED). Check the listing in App Store Connect; no automatic cancellation or replacement was attempted.",
+      "app-store-read-http-401",
+    ],
+    ["Something unexpected: details", "app-store-precheck-refused-error"],
+  ])
+    assert.equal(refusalReason(new Error(message)), reason);
+});
+
+const rejectsWith = async (promise, reason) =>
+  assert.equal(
+    refusalReason(
+      await promise.then(
+        () => assert.fail("expected refusal"),
+        (e) => e,
+      ),
+    ),
+    reason,
+  );
+
+test("hung or failed reads retry with backoff, then refuse with a bounded slug", async () => {
+  const timeout = () =>
+    new DOMException("The operation timed out.", "TimeoutError");
+  const abort = () => new DOMException("aborted", "AbortError");
+  const network = () =>
+    new TypeError("fetch failed", {
+      cause: Object.assign(new Error("connect ECONNRESET 10.0.0.1"), {
+        code: "ECONNRESET",
+      }),
+    });
+  const undici = () =>
+    Object.assign(new Error("Connect Timeout Error"), {
+      name: "ConnectTimeoutError",
+      code: "UND_ERR_CONNECT_TIMEOUT",
+    });
+  for (const [failure, reason] of [
+    [timeout, "app-store-read-timeout"],
+    [abort, "app-store-read-timeout"],
+    [undici, "app-store-read-timeout"],
+    [network, "app-store-read-network"],
+  ]) {
+    let calls = 0;
+    const delays = [];
+    const client = createClient(credentials, {
+      sleepImpl: async (ms) => delays.push(ms),
+      fetchImpl: async () => {
+        calls++;
+        throw failure();
+      },
+    });
+    await rejectsWith(client.request("apps"), reason);
+    assert.equal(calls, 5);
+    assert.deepEqual(delays, [1000, 2000, 4000, 8000]);
+  }
+  // A transient failure followed by success returns the read.
+  let calls = 0;
+  const client = createClient(credentials, {
+    sleepImpl: async () => {},
+    fetchImpl: async () => {
+      if (++calls < 3) throw calls === 1 ? timeout() : network();
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { id: "1" } }),
+      };
+    },
+  });
+  assert.deepEqual(await client.request("apps"), { data: { id: "1" } });
+  assert.equal(calls, 3);
+});
+
+test("a hung body read is retried like a hung request", async () => {
+  let calls = 0;
+  const client = createClient(credentials, {
+    sleepImpl: async () => {},
+    fetchImpl: async () => {
+      calls++;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new DOMException("timed out", "TimeoutError");
+        },
+      };
+    },
+  });
+  await rejectsWith(client.request("apps"), "app-store-read-timeout");
+  assert.equal(calls, 5);
+});
+
+test("writes are never retried on network or timeout errors", async () => {
+  for (const method of ["POST", "PATCH"]) {
+    for (const failure of [
+      () => new TypeError("fetch failed"),
+      () => new DOMException("timed out", "TimeoutError"),
+    ]) {
+      let calls = 0;
+      let slept = 0;
+      const client = createClient(credentials, {
+        sleepImpl: async () => slept++,
+        fetchImpl: async () => {
+          calls++;
+          throw failure();
+        },
+      });
+      await assert.rejects(client.request("appStoreVersions", method, {}));
+      assert.equal(calls, 1);
+      assert.equal(slept, 0);
+    }
+  }
+});
+
+test("unparseable responses and pagination faults refuse with bounded slugs", async () => {
+  const client = createClient(credentials, {
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => JSON.parse("<html>secret</html>"),
+    }),
+  });
+  await rejectsWith(client.request("apps"), "app-store-read-unparseable");
+  const offsite = createClient(credentials, {
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: [],
+        links: { next: "https://evil.test/v1/apps" },
+      }),
+    }),
+  });
+  await rejectsWith(
+    offsite.list("apps"),
+    "app-store-pagination-url-unexpected",
+  );
+  const looping = createClient(credentials, {
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [], links: { next: "apps" } }),
+    }),
+  });
+  await rejectsWith(looping.list("apps"), "app-store-pagination-repeated");
+});
+
+test("an unusable signing key refuses as an invalid auth key before any request", async () => {
+  let calls = 0;
+  const client = createClient(
+    { ...credentials, privateKey: "not a key" },
+    { fetchImpl: async () => calls++ },
+  );
+  await rejectsWith(client.request("apps"), "app-store-auth-key-invalid");
+  assert.equal(calls, 0);
+});
+
+test("metadata validation failures share one bounded slug", () => {
+  for (const broken of [
+    [{ ...metadata }, "1.0"],
+    [{ ...metadata, version: "1.0.5" }, "1.0.4"],
+    [{ ...metadata, draft: true }, "1.0.4"],
+    [{ ...metadata, releaseType: "MANUAL" }, "1.0.4"],
+    [{ ...metadata, copyright: " " }, "1.0.4"],
+    [{ ...metadata, reviewNotes: "x".repeat(4001) }, "1.0.4"],
+    [{ ...metadata, whatsNew: [] }, "1.0.4"],
+    [{ ...metadata, whatsNew: {} }, "1.0.4"],
+    [{ ...metadata, whatsNew: { EN: "x" } }, "1.0.4"],
+    [{ ...metadata, whatsNew: { "en-AU": "" } }, "1.0.4"],
+  ]) {
+    let error;
+    try {
+      validateMetadata(...broken);
+    } catch (caught) {
+      error = caught;
+    }
+    assert.equal(refusalReason(error), "app-store-metadata-invalid");
+  }
+});
+
+test("unclassified failures name only a fixed error class", () => {
+  for (const [error, reason] of [
+    [
+      new TypeError("x of undefined /home/secret"),
+      "app-store-precheck-refused-typeerror",
+    ],
+    [new RangeError("secret"), "app-store-precheck-refused-rangeerror"],
+    [new SyntaxError("secret"), "app-store-precheck-refused-syntaxerror"],
+    [
+      Object.assign(new Error("secret"), { name: "SecretError" }),
+      "app-store-precheck-refused-other",
+    ],
+    [
+      Object.assign(new Error("x"), { refusal: "not-a-known-slug" }),
+      "app-store-precheck-refused-error",
+    ],
+    [undefined, "app-store-precheck-refused-other"],
+  ])
+    assert.equal(refusalReason(error), reason);
+});
+
+test("a refusal receipt is retained only while no write was attempted", async () => {
+  const client = trackWrites({
+    request: async () => ({}),
+    list: async () => [],
+  });
+  const error = new Error("Selected build is invalid, expired, or mismatched");
+  await client.request("apps/x");
+  await client.list("apps");
+  assert.deepEqual(await refusalReceipt(error, client, "42"), {
+    outcome: "refused-before-write",
+    reason: "app-store-build-invalid",
+    source_run_id: 42,
+  });
+  // Credentials can fail before any client exists; that is also pre-write.
+  assert.equal(
+    (await refusalReceipt(error, undefined, "42")).reason,
+    "app-store-build-invalid",
+  );
+  assert.equal(await refusalReceipt(error, client, undefined), null);
+  await client.request("appStoreVersions", "POST", {}).catch(() => {});
+  assert.equal(client.writeAttempted, true);
+  assert.equal(await refusalReceipt(error, client, "42"), null);
+});
+
+test("a write that throws before reaching Apple still counts as attempted", async () => {
+  const client = trackWrites({
+    request: async () => {
+      throw new Error("network");
+    },
+    list: async () => [],
+  });
+  await assert.rejects(client.request("reviewSubmissions", "POST", {}));
+  assert.equal(await refusalReceipt(new Error("network"), client, "42"), null);
+});
+
+test("submitAppStore routes every write through the tracked client", async () => {
+  const f = fixture();
+  const client = trackWrites(f.client);
+  await submitAppStore({
+    client,
+    version: "1.0.4",
+    buildNumber: "15",
+    metadata,
+    commit: false,
+    env: {},
+  });
+  assert.equal(client.writeAttempted, false);
+  await submitAppStore({
+    client,
+    version: "1.0.4",
+    buildNumber: "15",
+    metadata,
+    commit: true,
+    env: {},
+  });
+  assert.equal(client.writeAttempted, true);
+});
+
+test("the submission CLI writes only the bounded pre-write refusal receipt", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "tasknotes-app-store-"));
+  try {
+    for (const [sourceRunId, written] of [
+      ["42", true],
+      [undefined, false],
+    ]) {
+      await rm(join(directory, "store-target-result.json"), { force: true });
+      const result = spawnSync(
+        process.execPath,
+        [
+          fileURLToPath(new URL("./submit-app-store.mjs", import.meta.url)),
+          "--submit",
+        ],
+        {
+          cwd: directory,
+          encoding: "utf8",
+          env: {
+            PATH: process.env.PATH,
+            ...(sourceRunId ? { SOURCE_RUN_ID: sourceRunId } : {}),
+          },
+        },
+      );
+      assert.equal(result.status, 1);
+      assert.equal(
+        result.stderr,
+        written
+          ? "App Store submission refused before any write: app-store-config-missing\n"
+          : "App Store submission refused; inspect the target outcome.\n",
+      );
+      const receipt = await readFile(
+        join(directory, "store-target-result.json"),
+        "utf8",
+      ).catch(() => null);
+      assert.deepEqual(
+        receipt && JSON.parse(receipt),
+        written
+          ? {
+              outcome: "refused-before-write",
+              reason: "app-store-config-missing",
+              source_run_id: 42,
+            }
+          : null,
+      );
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

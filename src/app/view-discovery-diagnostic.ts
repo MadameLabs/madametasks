@@ -10,14 +10,26 @@ const reasons: Readonly<Record<string, readonly string[]>> = {
     "bad_request",
     "invalid_source",
     "unsupported",
+    // Native Bases discovery refusals (mdbase Connect core `EvaluationFailure`).
+    "view_metadata_unavailable",
+    "view_unsupported_construct",
+    "query_budget_exceeded",
+    "query_cancelled",
+    "invalid_timezone",
   ],
   conflict: [
     "collection_changed",
     "source_changed",
     "catalog_changed",
     "view_discovery_stale",
+    // The record inventory failed a consistency check (tasknotes-app#436).
+    "concurrent_modification",
   ],
-  forbidden: ["insufficient_access"],
+  forbidden: [
+    "insufficient_access",
+    "view_requires_keyed_device",
+    "view_full_collection_required",
+  ],
   cancelled: ["superseded"],
   unavailable: [
     "timeout",
@@ -25,6 +37,10 @@ const reasons: Readonly<Record<string, readonly string[]>> = {
     "disconnected",
     "session_closed",
     "fenced",
+    "bases_contract_not_installed",
+    // Native Bases read refusals that are not evaluation failures.
+    "view_metadata_unavailable",
+    "view_read_not_ready",
   ],
 };
 const codes = new Set([
@@ -81,6 +97,14 @@ function classification(error: unknown): {
   // Every failure carries a code; anything unrecognised is internal.
   return { code: "internal", reason: null };
 }
+function boundedCount(value: number | null): number | null {
+  return value !== null &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= 100_000
+    ? value
+    : null;
+}
 function duration(value: number | null): number | null {
   return value !== null &&
     Number.isFinite(value) &&
@@ -97,6 +121,7 @@ function duration(value: number | null): number | null {
 export function logViewDiscovery({
   outcome,
   viewCount,
+  unreadableCount = null,
   stage,
   error,
   published,
@@ -105,6 +130,8 @@ export function logViewDiscovery({
 }: {
   outcome: ViewDiscoveryOutcome;
   viewCount: number | null;
+  /** View files discovery skipped as unreadable. */
+  unreadableCount?: number | null;
   stage: "metadata" | "discovery";
   error?: unknown;
   published: boolean;
@@ -112,13 +139,7 @@ export function logViewDiscovery({
   discoveryMs: number | null;
 }): void {
   try {
-    const count =
-      viewCount !== null &&
-      Number.isSafeInteger(viewCount) &&
-      viewCount >= 0 &&
-      viewCount <= 100_000
-        ? viewCount
-        : null;
+    const count = boundedCount(viewCount);
     const failure =
       outcome === "error"
         ? classification(error)
@@ -128,6 +149,7 @@ export function logViewDiscovery({
       JSON.stringify({
         outcome,
         viewCount: count,
+        unreadableCount: boundedCount(unreadableCount),
         stage,
         ...failure,
         published,

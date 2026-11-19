@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { it } from "node:test";
-import { loadOriginals, productionPin } from "./originals.mjs";
+import { parse } from "yaml";
+import { exactUiVersion, loadOriginals, productionPin } from "./originals.mjs";
 import { prepareInstall } from "./install-inputs.mjs";
 const root = new URL("../../", import.meta.url).pathname;
 it("authenticates production npm provenance, protected raw trust and ALL installed frozen originals", async () => {
@@ -75,6 +76,10 @@ it("derives frozen staging SDK and all UI peer resolutions without touching othe
       before.dependencies["@mdbase-dev/sdk"];
     assert.deepEqual(after, before);
     const staged = await readFile(join(temp, "pnpm-lock.yaml"), "utf8");
+    assert.deepEqual(
+      parse(staged).importers["apps/import"],
+      parse(lock).importers["apps/import"],
+    );
     assert.ok(!staged.includes(spec));
     assert.ok(staged.includes(sdk.sri));
     assert.equal(
@@ -107,4 +112,10 @@ it("derives frozen staging SDK and all UI peer resolutions without touching othe
   } finally {
     await rm(temp, { recursive: true, force: true });
   }
+});
+it("accepts beta and plain exact UI pins only", () => {
+  for (const version of ["0.1.0-beta.166", "0.1.0", "0.2.1"])
+    assert.match(version, exactUiVersion);
+  for (const version of ["^0.1.0", "latest", "0.1", "0.1.0 "])
+    assert.doesNotMatch(version, exactUiVersion);
 });

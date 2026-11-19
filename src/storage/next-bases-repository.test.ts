@@ -4,9 +4,14 @@ import type {
   AppBasesDescriptor,
   AppBasesResult,
 } from "@mdbase-dev/sdk/app-host";
-import { nextTaskFixture } from "../test/next-task-fixture";
+import {
+  attachTaskNotes,
+  nextTaskFixture,
+  seedTask,
+} from "../test/next-task-fixture";
 import type { TaskViewExecution } from "../domain/view";
 import * as timezone from "../domain/runtime-timezone";
+import { TASKNOTES_REQUEST_BUDGETS } from "../cloud/request-budgets";
 
 // Explicit native-result stand-ins. Memory fixture supplies task metadata only;
 // never native execution/catalog/authority/startup or actual WASM proof.
@@ -43,6 +48,7 @@ async function fixture() {
   const genericSource = vi.spyOn(f.client.views, "readSource");
   const list = vi.spyOn(f.client, "listAppBasesViews").mockResolvedValue({
     kind: "success",
+    unreadable: [],
     views: [descriptor],
     clock,
     collectionRevision: revision,
@@ -287,6 +293,7 @@ describe("native saved-view adapter sequencing (stand-ins only)", () => {
       );
       f.list.mockResolvedValue({
         kind: "success",
+        unreadable: [],
         views:
           drift === "missing"
             ? []
@@ -353,6 +360,7 @@ describe("native saved-view adapter sequencing (stand-ins only)", () => {
       .mockClear()
       .mockResolvedValueOnce({
         kind: "success",
+        unreadable: [],
         views: [],
         clock,
         collectionRevision: revision,
@@ -360,6 +368,7 @@ describe("native saved-view adapter sequencing (stand-ins only)", () => {
       })
       .mockResolvedValueOnce({
         kind: "success",
+        unreadable: [],
         views: [descriptor],
         clock,
         collectionRevision: revision,
@@ -373,12 +382,51 @@ describe("native saved-view adapter sequencing (stand-ins only)", () => {
     expect(catalog[0]!.views[0]!.id).toBe("1");
     expect(f.genericList).not.toHaveBeenCalled();
   });
+  it("names an unreadable view file as a source without views", async () => {
+    // F5: a prepended `---` block made one view file two YAML documents, and
+    // discovery refused the whole collection.
+    const f = await fixture();
+    const broken = {
+      record: "00000000-0000-0000-0000-000000000002",
+      path: "TaskNotes/Views/tasks-default.base",
+      sourceRevision: "sha256:" + "cd".repeat(32),
+      reason: "view_metadata_unavailable",
+      detail: "base_raw_frontmatter_unavailable",
+    };
+    // The vendored SDK may predate `unreadable`; pages carry it structurally.
+    const page = {
+      kind: "success" as const,
+      views: [descriptor],
+      unreadable: [broken],
+      clock,
+      collectionRevision: revision,
+      continuation: null,
+    };
+    f.list.mockClear().mockResolvedValueOnce(page);
+    const catalog = await f.repository.listViews();
+    expect(f.list.mock.calls[0]![0]).toMatchObject({ reportUnreadable: true });
+    expect(catalog.map((document) => document.source.path)).toEqual([
+      "tasks.base",
+      "TaskNotes/Views/tasks-default.base",
+    ]);
+    expect(catalog[1]).toMatchObject({
+      id: broken.record,
+      views: [],
+      source: { revision: broken.sourceRevision, format: "obsidian.base" },
+      unreadable: {
+        reason: "view_metadata_unavailable",
+        detail: "base_raw_frontmatter_unavailable",
+      },
+    });
+    expect(catalog[0]!.unreadable).toBeUndefined();
+  });
   it("does not publish a partial catalog after captured-cut drift", async () => {
     const f = await fixture();
     const before = await f.repository.cachedViews();
     f.list
       .mockResolvedValueOnce({
         kind: "success",
+        unreadable: [],
         views: [{ ...descriptor, ordinal: 2 }],
         clock,
         collectionRevision: revision,
@@ -386,6 +434,7 @@ describe("native saved-view adapter sequencing (stand-ins only)", () => {
       })
       .mockResolvedValueOnce({
         kind: "success",
+        unreadable: [],
         views: [],
         clock: { ...clock, instant: 2 },
         collectionRevision: revision,
@@ -521,34 +570,284 @@ describe("native saved-view adapter sequencing (stand-ins only)", () => {
       expect(performance.now() - started).toBeGreaterThanOrEqual(240);
     },
   );
+  it("overlapping discoveries share one native cursor instead of retiring each other", async () => {
+    const f = await fixture();
+    // The native replica holds ONE discovery cursor per session and scans
+    // every record, 64 at a time, so a 765-record collection pages 13 times.
+    // A second discovery started meanwhile replaces that cursor, and the
+    // first one's next page is refused as stale. Each page here costs a
+    // relay round trip (#449).
+    const pages = 13;
+    const roundTripMs = 40;
+    let cursor = 0;
+    const stale = {
+      code: "conflict",
+      recovery: "refresh",
+      reason: "view_discovery_stale",
+      message: "discovery changed or expired; start fresh discovery",
+    } as const;
+    f.list.mockReset().mockImplementation(async ({ continuation }) => {
+      await new Promise((resolve) => setTimeout(resolve, roundTripMs / 2));
+      let token: number;
+      let page: number;
+      if (!continuation) {
+        token = ++cursor;
+        page = 1;
+      } else {
+        [token, page] = [continuation[0]!, continuation[1]! + 1];
+        if (token !== cursor) {
+          await new Promise((resolve) => setTimeout(resolve, roundTripMs / 2));
+          return { kind: "refusal" as const, problem: stale };
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, roundTripMs / 2));
+      return {
+        kind: "success" as const,
+        unreadable: [],
+        views: page === pages ? [descriptor] : [],
+        clock,
+        collectionRevision: revision,
+        continuation: page === pages ? null : Uint8Array.of(token, page),
+      };
+    });
+    const started = performance.now();
+    // Navigation discovery, its rerun after the change watch becomes
+    // active, and a later caller that asks while both are still paging.
+    const later = new Promise((resolve) => setTimeout(resolve, 150)).then(() =>
+      f.repository.listViews(),
+    );
+    const catalogs = await Promise.race([
+      Promise.all([f.repository.listViews(), f.repository.listViews(), later]),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("discovery livelock")), 4_000),
+      ),
+    ]);
+    for (const catalog of catalogs)
+      expect(catalog[0]!.views.map((view) => view.name)).toEqual(["Same"]);
+    // One shared pass of 13 pages serves every overlapping caller.
+    expect(f.list).toHaveBeenCalledTimes(pages);
+    expect(performance.now() - started).toBeLessThan(roundTripMs * pages + 500);
+  });
+  it("a joined discovery continues under its own deadline when the pass's owner aborts", async () => {
+    const f = await fixture();
+    // A write retires the catalog, so the next execution rediscovers.
+    await f.repository.create({ title: "Retires the catalog" });
+    await vi.waitFor(async () =>
+      expect(await f.repository.cachedViews()).toEqual([]),
+    );
+    f.list.mockReset();
+    // The owner's first page is answered only by the owner's own abort.
+    f.list.mockImplementationOnce(
+      (_input, options) =>
+        new Promise((_, reject) => {
+          const signal = options!.signal!;
+          signal.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+        }),
+    );
+    f.list.mockResolvedValue({
+      kind: "success",
+      unreadable: [],
+      views: [descriptor],
+      clock,
+      collectionRevision: revision,
+      continuation: null,
+    });
+    const owner = new AbortController();
+    const executions = f.repository.iterateView(f.view, {
+      signal: owner.signal,
+    });
+    const execution = executions[Symbol.asyncIterator]().next();
+    await vi.waitFor(() => expect(f.list).toHaveBeenCalledOnce());
+    const joined = f.repository.listViews();
+    owner.abort(new Error("view closed"));
+    await expect(execution).rejects.toThrow("view closed");
+    const catalog = await joined;
+    expect(catalog[0]!.views.map((view) => view.name)).toEqual(["Same"]);
+    expect(f.list).toHaveBeenCalledTimes(2);
+  });
+  describe("discovery longer than one foreground budget (#436)", () => {
+    const budgets = TASKNOTES_REQUEST_BUDGETS as { foregroundMs: number };
+    const foregroundMs = budgets.foregroundMs;
+    afterEach(() => {
+      budgets.foregroundMs = foregroundMs;
+    });
+    // Discovery reads every record, one relayed round trip per page, so a
+    // large vault pages for longer than one foreground budget. Each page is
+    // bounded on its own; the pass as a whole is not.
+    function paged(f: Awaited<ReturnType<typeof fixture>>, pages: number) {
+      f.list.mockReset().mockImplementation(async ({ continuation }) => {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const page = continuation ? continuation[0]! + 1 : 1;
+        return {
+          kind: "success" as const,
+          unreadable: [],
+          views: page === pages ? [descriptor] : [],
+          clock,
+          collectionRevision: revision,
+          continuation: page === pages ? null : Uint8Array.of(page),
+        };
+      });
+    }
+    it("lists views when every page fits its own budget", async () => {
+      const f = await fixture();
+      budgets.foregroundMs = 400;
+      paged(f, 5);
+      const started = performance.now();
+      const documents = await f.repository.listViews();
+      expect(performance.now() - started).toBeGreaterThan(400);
+      expect(documents[0]!.views.map((view) => view.name)).toEqual(["Same"]);
+      expect(f.list).toHaveBeenCalledTimes(5);
+    });
+    it("a view that must rediscover first still executes", async () => {
+      const f = await fixture();
+      // A write retires the catalog, so the next execution rediscovers.
+      await f.repository.create({ title: "Retires the catalog" });
+      await vi.waitFor(async () =>
+        expect(await f.repository.cachedViews()).toEqual([]),
+      );
+      budgets.foregroundMs = 400;
+      paged(f, 5);
+      f.execute.mockClear();
+      const execution = await f.repository.executeView(f.view);
+      expect(execution.rows).toHaveLength(1);
+      expect(f.list).toHaveBeenCalledTimes(5);
+      expect(f.execute).toHaveBeenCalledOnce();
+    });
+    it("a page that outlives its own budget still fails", async () => {
+      const f = await fixture();
+      budgets.foregroundMs = 300;
+      f.list.mockReset().mockImplementation(
+        (_input, options) =>
+          new Promise((_, reject) => {
+            const signal = options!.signal!;
+            signal.addEventListener("abort", () => reject(signal.reason), {
+              once: true,
+            });
+          }),
+      );
+      const started = performance.now();
+      await expect(f.repository.listViews()).rejects.toMatchObject({
+        name: "TimeoutError",
+      });
+      expect(performance.now() - started).toBeLessThan(1_500);
+      expect(f.list).toHaveBeenCalledOnce();
+    });
+  });
   it("rereads discovery at once when a local data event retires its cut", async () => {
     const f = await fixture();
     f.list.mockClear();
-    // A refresh finishing during discovery (as the post-start refresh does)
-    // emits a data event, which retires the cut this discovery was reading.
+    // A local write finishing during discovery emits a data event, which
+    // retires the cut this discovery was reading.
     f.list.mockImplementationOnce(async () => {
-      await f.repository.refresh();
+      await f.repository.create({ title: "Written during discovery" });
       return {
         kind: "success" as const,
+        unreadable: [],
         views: [descriptor],
         clock,
         collectionRevision: revision,
         continuation: null,
       };
     });
-    const data = vi.fn();
+    let retired = Number.NaN;
     f.repository.subscribe((change) => {
-      if (change?.kind === "data") data();
+      if (change?.kind === "data") retired = performance.now();
     });
-    const started = performance.now();
     const documents = await f.repository.listViews();
-    const elapsed = performance.now() - started;
-    expect(data).toHaveBeenCalled();
+    const elapsed = performance.now() - retired;
     expect(documents[0]!.views.map((view) => view.name)).toEqual(["Same"]);
     expect(f.list).toHaveBeenCalledTimes(2);
     // The new generation already exists; the 250 ms refusal pacing would
     // only delay the first view.
     expect(elapsed).toBeLessThan(240);
+  });
+  it("a refresh that rereads an unchanged collection does not restart discovery", async () => {
+    const f = await fixture();
+    // Load the task index first: this is the periodic refresh case.
+    await f.repository.refresh();
+    const pages = 13;
+    let refreshed = false;
+    f.list.mockReset().mockImplementation(async ({ continuation }) => {
+      const page = continuation ? continuation[0]! + 1 : 1;
+      // The post-start and periodic refreshes land while discovery pages
+      // through a relayed collection (#436).
+      if (page === 2 && !refreshed) {
+        refreshed = true;
+        await f.repository.refresh();
+      }
+      return {
+        kind: "success" as const,
+        unreadable: [],
+        views: page === pages ? [descriptor] : [],
+        clock,
+        collectionRevision: revision,
+        continuation: page === pages ? null : Uint8Array.of(page),
+      };
+    });
+    const data = vi.fn();
+    f.repository.subscribe((change) => {
+      if (change?.kind === "data") data();
+    });
+    const documents = await f.repository.listViews();
+    expect(documents[0]!.views.map((view) => view.name)).toEqual(["Same"]);
+    // Screens still hear that the refresh finished...
+    expect(data).toHaveBeenCalled();
+    // ...but the pass in flight was not retired and read again.
+    expect(f.list).toHaveBeenCalledTimes(pages);
+  });
+  it("the first task index load does not restart discovery either", async () => {
+    const f = await fixture();
+    const reloaded = await attachTaskNotes(f.replica);
+    fixtures.push(reloaded);
+    const list = vi.spyOn(reloaded.client, "listAppBasesViews");
+    let refreshed = false;
+    list.mockImplementation(async ({ continuation }) => {
+      const page = continuation ? continuation[0]! + 1 : 1;
+      // The post-start refresh loads the deferred index for the first time.
+      if (page === 2 && !refreshed) {
+        refreshed = true;
+        await reloaded.repository.refresh();
+      }
+      return {
+        kind: "success" as const,
+        unreadable: [],
+        views: page === 3 ? [descriptor] : [],
+        clock,
+        collectionRevision: revision,
+        continuation: page === 3 ? null : Uint8Array.of(page),
+      };
+    });
+    await reloaded.repository.initialize({ deferTaskIndex: true });
+    const documents = await reloaded.repository.listViews();
+    expect(documents[0]!.views.map((view) => view.name)).toEqual(["Same"]);
+    expect(list).toHaveBeenCalledTimes(3);
+  });
+  it("a refresh that finds a changed task still retires discovery in flight", async () => {
+    const f = await fixture();
+    await f.repository.refresh();
+    let seeded = false;
+    f.list.mockReset().mockImplementation(async ({ continuation }) => {
+      const page = continuation ? continuation[0]! + 1 : 1;
+      if (page === 2 && !seeded) {
+        seeded = true;
+        seedTask(f.replica, { title: "Written by another app" });
+        await f.repository.refresh();
+      }
+      return {
+        kind: "success" as const,
+        unreadable: [],
+        views: page === 3 ? [descriptor] : [],
+        clock,
+        collectionRevision: revision,
+        continuation: page === 3 ? null : Uint8Array.of(page),
+      };
+    });
+    const documents = await f.repository.listViews();
+    expect(documents[0]!.views.map((view) => view.name)).toEqual(["Same"]);
+    // Two pages of the retired pass, then a full pass of three.
+    expect(f.list).toHaveBeenCalledTimes(5);
   });
   it("propagates native refusal and pre-cancellation without fallback or hydration", async () => {
     const f = await fixture();

@@ -524,9 +524,7 @@ test("supports demo attachments and collection settings", async ({ page }) => {
       exact: true,
     })
     .click();
-  await expect(
-    page.getByRole("heading", { name: "Attachments" }),
-  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Attachments" })).toBeVisible();
   await page
     .locator('input[type="file"]')
     .first()
@@ -546,7 +544,7 @@ test("supports demo attachments and collection settings", async ({ page }) => {
   await openNavigationItem(page, "Settings");
   await page
     .getByRole("navigation", { name: "Settings sections" })
-    .getByText("Collection behavior", { exact: true })
+    .getByText("Workflow", { exact: true })
     .click();
   await page.getByRole("combobox", { name: "Default priority" }).click();
   await page.getByRole("option", { name: "High", exact: true }).click();
@@ -565,7 +563,7 @@ test("a status and a custom field added in Settings reach the task editor", asyn
   await openNavigationItem(page, "Settings");
   await page
     .getByRole("navigation", { name: "Settings sections" })
-    .getByText("Collection behavior", { exact: true })
+    .getByText("Task properties", { exact: true })
     .click();
 
   await page.getByRole("button", { name: "Add status", exact: true }).click();
@@ -606,8 +604,10 @@ test("a status and a custom field added in Settings reach the task editor", asyn
   await pane.getByRole("combobox", { name: "Priority", exact: true }).click();
   await expect(page.getByRole("option", { name: "Someday" })).toBeVisible();
   await page.keyboard.press("Escape");
-  await pane.getByText("More properties", { exact: true }).click();
-  await expect(pane.getByText("Client", { exact: true })).toBeVisible();
+  await pane.getByRole("button", { name: "Add property", exact: true }).click();
+  await expect(
+    page.getByRole("menuitem", { name: "Client", exact: true }),
+  ).toBeVisible();
 });
 
 test("demo work screen has no serious accessibility violations", async ({
@@ -640,5 +640,8 @@ test("browser Back keeps an unsaveable task draft open", async ({ page }) => {
   await page.goBack();
   await expect(page).toHaveURL(/\/task\//);
   await expect(title).toHaveValue("");
-  await expect(notes).toHaveValue("Unsaved draft body");
+  // Leaving the notes field shows them as read; the draft is still there.
+  await expect(page.locator(".notes-field")).toContainText(
+    "Unsaved draft body",
+  );
 });

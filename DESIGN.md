@@ -255,21 +255,39 @@ Today             Search       More
   source paths are quiet metadata, and search plus All/In navigation/Editable
   filters keep large collections manageable. Secondary edit, duplicate, and
   delete operations live in an overflow menu rather than competing with the row.
-- Settings groups choices by who they affect: Collection, Account (when a
-  private account exists), Reminders, On this device, Collection behavior
-  (shared through the collection), and About & help. Device and shared
-  sections name their scope. Phones show the sections as a list, each opening
-  as its own page at `/more/<section>`; wider screens show every section with
-  a section index, sticky beside the panels from 1100px. Collection leads with
-  one card holding the collection name, connection state, counts, Refresh now,
-  and Change collection. How tasks are stored, the location, the mdbase format,
-  and refresh diagnostics sit in a disclosure that remembers its state.
-  Immediately applied on/off settings use switches. Collection behavior is an
-  explicitly saved form grouped as New tasks, Repeating tasks, Archive, and
-  Links and time tracking; a field appears only when the choice that enables it
-  is on. Its unsaved draft survives leaving Settings, is marked in the section
-  index or list, and a sticky bar offers Discard and Save changes. Install
-  appears once as a dismissible banner and remains under About. Settings has
+- A view file discovery cannot read (malformed YAML, an unusable `views`
+  value) hides only its own views. The views notice names each such file by its
+  collection-relative path in muted mono, in place of "No views yet", and clears
+  once the fixed file is rediscovered. Where the collection's computer cannot
+  skip such files yet, the refusal says a view file is at fault rather than only
+  "Couldn't load your views".
+- Settings groups choices by who they affect, in three clusters: the shared
+  collection (Collection, Task properties, Workflow), this person and device
+  (Reminders, On this device, and Account when a private account exists), and
+  About & help. Every screen size shows one section at a time. Phones list
+  the clusters as grouped rows, each opening as its own page at
+  `/more/<section>`; wider screens keep a section index beside the open
+  section, as wrapping tabs below 1100px and a sticky column with hairlines
+  between clusters from 1100px. A section names its scope once, in a plain
+  muted sentence under its title, when it is shared or device-only.
+  Collection leads with one card holding the collection name, connection
+  state, counts, Refresh now, and Change collection, then Import tasks as an
+  ordinary setting row. How tasks are stored, the location, the mdbase format,
+  a link to manage collections in mdbase Connect, and refresh diagnostics sit
+  in a disclosure that remembers its state. About & help says TaskNotes is one
+  of the mdbase apps and links out to them. The iOS app hides both links,
+  because both pages lead to mdbase's paid plans.
+  On this device uses label-beside-control rows on every width except the
+  very narrowest. Immediately applied on/off settings use switches. The
+  collection's shared settings are one explicitly saved draft edited in two
+  sections: Task properties (statuses, priorities, custom fields) and Workflow
+  (New tasks, Repeating tasks, Archive, and Links and time tracking). A field
+  appears only when the choice that enables it is on. The draft survives
+  leaving Settings, each section with unsaved changes is marked in the index
+  or list, and either section's sticky bar offers Discard and Save changes for
+  the whole draft. Status and priority rows keep their name fields one width,
+  with the stored value and Default tag in a fixed column. Install appears
+  once as a dismissible banner and remains under About. Settings has
   no capture control of its own.
 - Projects shows a project count beside a compact native "Jump to project"
   picker rather than a full-width field. A sidebar project opens its own page,
@@ -406,14 +424,26 @@ Today             Search       More
 - Scheduled and Due retain visible labels, including when both dates occur on
   a row. Routine status/priority defaults recede; custom meaningful values stay
   available. Completion circles do not use a legacy default status color.
-- Task detail leads with a title-level completion control, then compact wrapping
-  chips for status, priority, Scheduled, Due, and project. Each chip opens its
-  existing editor; long values truncate without widening the pane. Notes follow
-  immediately, then Subtasks and Attachments. More properties starts collapsed
-  and retains every secondary and custom field. Existing notes open as rendered Markdown; clicking the text or choosing
-  Write opens the source. Empty notes open ready for writing. Save status is
-  quiet proportional text beside the task actions. Without attachments,
-  Attachments collapses to one row holding its heading and add actions.
+- Task detail leads with a title-level completion control, then one property
+  list: icon, label and value per row, with the value as the control. Status,
+  Priority, Scheduled, Due and Project always show; Status and Priority take
+  the collection's own colours and work at any count. Repeat, Reminders, Time,
+  Tags, Contexts, Assigned to, Blocked by and custom fields show once they hold
+  a value (required custom fields always show) and otherwise wait under Add
+  property. A row shown when the task opened, or added since, stays while it is
+  emptied. Single choices open their select or date tool; lists open a picker
+  that closes with Done or Escape and keeps what was typed; editors with several
+  parts (Repeat, Reminders, Time, Assigned to, Blocked by) expand beneath their
+  row with a one-line summary when collapsed. Each reminder is one line with an
+  optional description; presets add 5 minutes to 1 day before the due or
+  scheduled date, and Fixed date and time adds an absolute reminder. Long values
+  truncate without widening the pane. Notes follow the list as one surface:
+  existing notes read as rendered Markdown, clicking the text or Edit opens the
+  source, and leaving the field or Done returns to reading. Empty notes open
+  ready for writing. Add image sits beside the Notes heading. Save status is
+  quiet proportional text beside the task actions. Subtasks and Attachments the
+  task does not have yet share one quiet row of actions (Add subtask, Attach
+  file); each becomes a full section once it has content.
   Attach file accepts any file the collection can store. Non-image attachments
   show a quiet file icon, a truncating filename, size and Download; they are
   never embedded in Notes or opened as active content in the app. Raster image

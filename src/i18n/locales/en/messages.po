@@ -118,6 +118,11 @@ msgstr "(unsaved changes)"
 msgid "{0, plural, =1 {Adding image…} other {Adding # images…}}"
 msgstr "{0, plural, =1 {Adding image…} other {Adding # images…}}"
 
+#. placeholder {0}: paths.length
+#: src/app/app-shell.tsx
+msgid "{0, plural, =1 {Couldn't read this file, so any views in it aren't shown:} other {Couldn't read # files, so any views in them aren't shown:}}"
+msgstr "{0, plural, =1 {Couldn't read this file, so any views in it aren't shown:} other {Couldn't read # files, so any views in them aren't shown:}}"
+
 #. placeholder {0}: created.length
 #: src/app/scratchpad-screen.tsx
 msgid "{0, plural, =1 {Image added} other {# images added}}"
@@ -456,6 +461,22 @@ msgstr "{deadlines, plural, one {# deadline moved too} other {# deadlines moved 
 msgid "{deadlines, plural, one {# due date has passed} other {# due dates have passed}}"
 msgstr "{deadlines, plural, one {# due date has passed} other {# due dates have passed}}"
 
+#: src/components/reminder-editor.tsx
+msgid "{duration} after due"
+msgstr "{duration} after due"
+
+#: src/components/reminder-editor.tsx
+msgid "{duration} after scheduled"
+msgstr "{duration} after scheduled"
+
+#: src/components/reminder-editor.tsx
+msgid "{duration} before due"
+msgstr "{duration} before due"
+
+#: src/components/reminder-editor.tsx
+msgid "{duration} before scheduled"
+msgstr "{duration} before scheduled"
+
 #: src/app/task-editor-draft.ts
 msgid "{estimate}m estimate"
 msgstr "{estimate}m estimate"
@@ -504,7 +525,7 @@ msgstr "{label} amount"
 msgid "{label} column"
 msgstr "{label} column"
 
-#: src/components/task-detail-dates.tsx
+#: src/app/task-property-list.tsx
 #: src/components/tasknotes-controls.tsx
 msgid "{label} date"
 msgstr "{label} date"
@@ -527,8 +548,8 @@ msgstr "{label} moved."
 msgid "{label} suggestions"
 msgstr "{label} suggestions"
 
+#: src/app/task-property-list.tsx
 #: src/components/task-date-panel.tsx
-#: src/components/task-detail-dates.tsx
 #: src/components/tasknotes-controls.tsx
 msgid "{label} time"
 msgstr "{label} time"
@@ -734,7 +755,7 @@ msgstr "Actions for {0}"
 msgid "Active"
 msgstr "Active"
 
-#: src/app/task-core-properties.tsx
+#: src/app/task-property-list.tsx
 #: src/app/view-editor-form.tsx
 #: src/app/views/view-catalog.tsx
 #: src/components/global-task-capture.tsx
@@ -846,6 +867,7 @@ msgid "Add formula"
 msgstr "Add formula"
 
 #: src/app/scratchpad-screen.tsx
+#: src/components/task-attachments.tsx
 msgid "Add image"
 msgstr "Add image"
 
@@ -864,6 +886,10 @@ msgstr "Add priority"
 #: src/app/view-editor-form.tsx
 msgid "Add projection"
 msgstr "Add projection"
+
+#: src/app/task-property-list.tsx
+msgid "Add property"
+msgstr "Add property"
 
 #: src/components/reminder-editor.tsx
 msgid "Add reminder"
@@ -937,7 +963,6 @@ msgstr "Added"
 msgid "Added tag {value} to {tasks}"
 msgstr "Added tag {value} to {tasks}"
 
-#: src/app/views/project-property-offer.tsx
 #: src/components/task-capture.tsx
 msgid "Adding"
 msgstr "Adding"
@@ -996,7 +1021,7 @@ msgstr "Advanced recurrence"
 msgid "Advanced recurrence rule"
 msgstr "Advanced recurrence rule"
 
-#: src/app/task-editor-draft.ts
+#: src/app/task-property-list.tsx
 msgid "Advanced repeat"
 msgstr "Advanced repeat"
 
@@ -1103,10 +1128,6 @@ msgstr "App language"
 msgid "App update"
 msgstr "App update"
 
-#: src/app/more-screen.tsx
-msgid "Appearance"
-msgstr "Appearance"
-
 #: src/components/recurrence-field.tsx
 msgid "Apply rule"
 msgstr "Apply rule"
@@ -1155,6 +1176,7 @@ msgstr "Arrange tasks"
 msgid "Ascending"
 msgstr "Ascending"
 
+#: src/app/task-property-list.tsx
 #: src/components/assignee-editor.tsx
 msgid "Assigned to"
 msgstr "Assigned to"
@@ -1221,11 +1243,12 @@ msgstr "Before"
 msgid "Blocked"
 msgstr "Blocked"
 
+#: src/app/task-property-list.tsx
 #: src/components/dependency-editor.tsx
 msgid "Blocked by"
 msgstr "Blocked by"
 
-#: src/components/dependency-editor.tsx
+#: src/app/task-property-list.tsx
 msgid "Blocking"
 msgstr "Blocking"
 
@@ -1396,6 +1419,10 @@ msgstr "Choice submitted. It may still be pending sync; check the confirmed, pen
 msgid "Choose"
 msgstr "Choose"
 
+#: src/app/import-screen.tsx
+msgid "Choose a connected collection before importing."
+msgstr "Choose a connected collection before importing."
+
 #: src/components/task-model-settings.tsx
 msgid "Choose a default that is still in the list."
 msgstr "Choose a default that is still in the list."
@@ -1412,7 +1439,7 @@ msgstr "Choose a person…"
 msgid "Choose a property"
 msgstr "Choose a property"
 
-#: src/app/task-custom-field.tsx
+#: src/app/task-property-list.tsx
 msgid "Choose a value"
 msgstr "Choose a value"
 
@@ -1452,6 +1479,7 @@ msgstr "Choose what becomes a task"
 msgid "Choose which tasks belong in this view."
 msgstr "Choose which tasks belong in this view."
 
+#: src/app/import-screen.tsx
 #: src/components/expression-builder.tsx
 msgid "Choose…"
 msgstr "Choose…"
@@ -1474,6 +1502,10 @@ msgstr "Clear checklist items in the note on each repeat"
 msgid "Clear due date"
 msgstr "Clear due date"
 
+#: src/app/import-screen.tsx
+msgid "Clear loaded Todoist data"
+msgstr "Clear loaded Todoist data"
+
 #: src/app/search-screen.tsx
 msgid "Clear recent searches"
 msgstr "Clear recent searches"
@@ -1495,6 +1527,7 @@ msgstr "Clear scheduled date"
 msgid "Clear search"
 msgstr "Clear search"
 
+#: src/app/import-screen.tsx
 #: src/app/scratchpad-note.tsx
 msgid "Clear selection"
 msgstr "Clear selection"
@@ -1532,6 +1565,7 @@ msgstr "Close {0}"
 msgid "Close {accessibleName} calendar"
 msgstr "Close {accessibleName} calendar"
 
+#: src/app/task-property-list.tsx
 #: src/components/tasknotes-controls.tsx
 msgid "Close {ariaLabel}"
 msgstr "Close {ariaLabel}"
@@ -1597,10 +1631,9 @@ msgstr "Collapse sidebar (M)"
 msgid "Collection"
 msgstr "Collection"
 
-#: src/app/settings-sections.ts
-#: src/components/task-model-settings.tsx
-msgid "Collection behavior"
-msgstr "Collection behavior"
+#: src/app/import-screen.tsx
+msgid "Collection access is unavailable."
+msgstr "Collection access is unavailable."
 
 #: src/components/collection-availability.tsx
 msgid "Collection connection"
@@ -1639,10 +1672,6 @@ msgstr "Color for {name}"
 msgid "Color theme"
 msgstr "Color theme"
 
-#: src/app/task-custom-field.tsx
-msgid "Comma-separated values"
-msgstr "Comma-separated values"
-
 #: src/app/keyboard-shortcuts.ts
 #: src/components/command-palette.tsx
 msgid "Command palette"
@@ -1669,11 +1698,6 @@ msgstr "Complete"
 
 #: src/app/views/kanban-view.tsx
 msgctxt "board column: completed tasks"
-msgid "Complete"
-msgstr "Complete"
-
-#: src/components/dependency-editor.tsx
-msgctxt "related task completion state"
 msgid "Complete"
 msgstr "Complete"
 
@@ -1762,10 +1786,6 @@ msgstr "Computed property name {0}"
 msgid "Computed property scope {0}"
 msgstr "Computed property scope {0}"
 
-#: src/app/task-screen.tsx
-msgid "Computer, Errands"
-msgstr "Computer, Errands"
-
 #: src/components/expression-builder.tsx
 msgid "Condition"
 msgstr "Condition"
@@ -1810,6 +1830,10 @@ msgstr "Conflicting changes"
 msgid "Connect calendars"
 msgstr "Connect calendars"
 
+#: src/app/import-screen.tsx
+msgid "Connect Todoist"
+msgstr "Connect Todoist"
+
 #: src/app/more-screen.tsx
 #: src/calendar-service/settings.tsx
 msgid "Connected"
@@ -1836,7 +1860,7 @@ msgid "contexts"
 msgstr "contexts"
 
 #: src/app/search-screen.tsx
-#: src/app/task-screen.tsx
+#: src/app/task-property-list.tsx
 #: src/app/view-editor-fields.ts
 #: src/app/view-editor-form.tsx
 #: src/components/task-actions.tsx
@@ -1888,6 +1912,10 @@ msgstr "Copy task link"
 msgid "Copy title"
 msgstr "Copy title"
 
+#: src/app/more-screen.tsx
+msgid "Copy your active Todoist tasks into this collection. Todoist itself is not changed."
+msgstr "Copy your active Todoist tasks into this collection. Todoist itself is not changed."
+
 #: src/components/recurrence-field.tsx
 msgid "Correct the rule before it can be scheduled."
 msgstr "Correct the rule before it can be scheduled."
@@ -1911,6 +1939,10 @@ msgstr "Could not confirm the outcome of your choice. Refresh and review the cur
 msgid "Could not load projects."
 msgstr "Could not load projects."
 
+#: src/app/import-screen.tsx
+msgid "Could not load Todoist tasks."
+msgstr "Could not load Todoist tasks."
+
 #. placeholder {0}: row.task.title
 #. placeholder {1}: message(reason)
 #: src/app/views-screen.tsx
@@ -1928,6 +1960,10 @@ msgstr "Couldn't add starter views."
 #: src/components/task-record-file.tsx
 msgid "Couldn’t copy"
 msgstr "Couldn’t copy"
+
+#: src/app/app-shell.tsx
+msgid "Couldn't load your views because a file in this collection can't be read."
+msgstr "Couldn't load your views because a file in this collection can't be read."
 
 #: src/app/app-shell.tsx
 #: src/app/use-navigation-views.ts
@@ -2007,6 +2043,7 @@ msgstr "Create the next after completion"
 msgid "Create view"
 msgstr "Create view"
 
+#: src/app/import-screen.tsx
 #: src/app/scratchpad-note.tsx
 msgid "Created"
 msgstr "Created"
@@ -2046,7 +2083,6 @@ msgid "Dark"
 msgstr "Dark"
 
 #: src/components/recurrence-field.tsx
-#: src/components/reminder-editor.tsx
 #: src/components/task-vocabulary-editor.tsx
 #: src/components/tasknotes-controls.tsx
 msgid "Date"
@@ -2107,6 +2143,10 @@ msgstr "Days"
 #: src/components/expression-builder.tsx
 msgid "Days from today"
 msgstr "Days from today"
+
+#: src/app/import-screen.tsx
+msgid "Deadlines become due dates."
+msgstr "Deadlines become due dates."
 
 #: src/calendar-service/event-labels.ts
 msgid "Declined"
@@ -2221,6 +2261,15 @@ msgstr "Description"
 msgid "Deselect {0}"
 msgstr "Deselect {0}"
 
+#: src/app/import-screen.tsx
+msgid "Destination changed. Preview the import again."
+msgstr "Destination changed. Preview the import again."
+
+#. placeholder {0}: destination.name
+#: src/app/import-screen.tsx
+msgid "Destination: {0}"
+msgstr "Destination: {0}"
+
 #: src/components/task-attachments.tsx
 msgid "Detach"
 msgstr "Detach"
@@ -2327,7 +2376,8 @@ msgstr "Does TaskNotes work offline?"
 msgid "done"
 msgstr "done"
 
-#: src/app/task-core-properties.tsx
+#: src/app/task-property-list.tsx
+#: src/app/task-screen.tsx
 #: src/app/views/navigation-view-order.tsx
 #: src/components/recurrence-field.tsx
 #: src/components/task-properties-sheet.tsx
@@ -2351,6 +2401,10 @@ msgstr "Download"
 #: src/components/task-attachments.tsx
 msgid "Download {0}"
 msgstr "Download {0}"
+
+#: src/app/import-screen.tsx
+msgid "Download report"
+msgstr "Download report"
 
 #: src/app/views/kanban-view.tsx
 msgid "Drag to move between columns. Use left and right arrow keys."
@@ -2379,6 +2433,7 @@ msgstr "due"
 
 #: src/app/calendar-row-details.ts
 #: src/app/task-calendar-view.tsx
+#: src/app/task-property-list.tsx
 #: src/app/view-editor-fields.ts
 #: src/components/reminder-editor.tsx
 #: src/components/task-capture.tsx
@@ -2409,6 +2464,7 @@ msgstr "Due {0}"
 msgid "Due and scheduled"
 msgstr "Due and scheduled"
 
+#: src/app/import-screen.tsx
 #: src/app/view-sort-choices.tsx
 msgid "Due date"
 msgstr "Due date"
@@ -2445,14 +2501,16 @@ msgstr "Earlier notes"
 msgid "Earlier rules take priority."
 msgstr "Earlier rules take priority."
 
+#: src/app/task-screen.tsx
 #: src/app/views/view-catalog.tsx
 msgid "Edit"
 msgstr "Edit"
 
+#. placeholder {0}: String(label)
+#. placeholder {0}: String(notesLabel)
 #. placeholder {0}: dated ? item.key : item.label
-#. placeholder {0}: detail.label
-#. placeholder {0}: props.label
-#: src/app/task-core-properties.tsx
+#: src/app/task-property-list.tsx
+#: src/app/task-screen.tsx
 #: src/app/views-screen.tsx
 #: src/components/task-capture.tsx
 #: src/components/task-property-editor.tsx
@@ -2497,10 +2555,6 @@ msgstr "Editable"
 msgid "Editor for {0}"
 msgstr "Editor for {0}"
 
-#: src/app/task-screen.tsx
-msgid "Editor mode"
-msgstr "Editor mode"
-
 #: src/i18n/ui-copy.ts
 msgid "empty item"
 msgstr "empty item"
@@ -2544,7 +2598,7 @@ msgstr "Enter to set {0}"
 msgid "Error code: <0>{0}</0>"
 msgstr "Error code: <0>{0}</0>"
 
-#: src/app/task-screen.tsx
+#: src/app/task-property-list.tsx
 #: src/components/task-capture.tsx
 msgid "Estimate (minutes)"
 msgstr "Estimate (minutes)"
@@ -2585,6 +2639,10 @@ msgstr "Expand sidebar"
 msgid "Expand sidebar (M)"
 msgstr "Expand sidebar (M)"
 
+#: src/app/more-screen.tsx
+msgid "Explore mdbase apps"
+msgstr "Explore mdbase apps"
+
 #: src/app/view-editor-form.tsx
 msgid "Expression"
 msgstr "Expression"
@@ -2608,6 +2666,10 @@ msgstr "Extra context for the task"
 #: src/components/task-vocabulary-editor.tsx
 msgid "Extra properties kept in each task’s file. Removing a field here leaves any values already in the files."
 msgstr "Extra properties kept in each task’s file. Removing a field here leaves any values already in the files."
+
+#: src/app/import-screen.tsx
+msgid "Failed"
+msgstr "Failed"
 
 #: src/components/task-vocabulary-editor.tsx
 msgid "Field name"
@@ -2935,6 +2997,10 @@ msgstr "How tasks are stored"
 msgid "How to install"
 msgstr "How to install"
 
+#: src/app/import-screen.tsx
+msgid "I reviewed these tasks and the destination."
+msgstr "I reviewed these tasks and the destination."
+
 #: src/components/private-account-settings.tsx
 msgid "I saved my recovery key"
 msgstr "I saved my recovery key"
@@ -2962,6 +3028,35 @@ msgstr "Image preview unavailable"
 #: src/components/markdown-preview.tsx
 msgid "Image unavailable offline"
 msgstr "Image unavailable offline"
+
+#: src/app/import-screen.tsx
+msgid "Import could not continue."
+msgstr "Import could not continue."
+
+#: src/app/import-screen.tsx
+msgid "Import folder"
+msgstr "Import folder"
+
+#: src/app/import-screen.tsx
+#: src/app/more-screen.tsx
+msgid "Import from Todoist"
+msgstr "Import from Todoist"
+
+#: src/app/import-screen.tsx
+msgid "Import from Todoist in the web app."
+msgstr "Import from Todoist in the web app."
+
+#: src/app/import-screen.tsx
+msgid "Import report"
+msgstr "Import report"
+
+#: src/app/import-screen.tsx
+msgid "Import selected tasks"
+msgstr "Import selected tasks"
+
+#: src/app/more-screen.tsx
+msgid "Import tasks"
+msgstr "Import tasks"
 
 #: src/app/views/view-catalog.tsx
 msgid "In navigation"
@@ -2994,10 +3089,6 @@ msgstr "Indent"
 #: src/components/task-attachments.tsx
 msgid "Insert"
 msgstr "Insert"
-
-#: src/components/task-attachments.tsx
-msgid "Insert in Notes"
-msgstr "Insert in Notes"
 
 #: src/app/more-screen.tsx
 msgid "Install app"
@@ -3164,6 +3255,14 @@ msgstr "Keyboard shortcuts"
 #: src/i18n/language-settings.tsx
 msgid "Language"
 msgstr "Language"
+
+#: src/app/more-screen.tsx
+msgid "Language and appearance"
+msgstr "Language and appearance"
+
+#: src/app/more-screen.tsx
+msgid "Language, theme, and calendar"
+msgstr "Language, theme, and calendar"
 
 #: src/i18n/presentation.ts
 msgid "last"
@@ -3343,6 +3442,10 @@ msgstr "Manage"
 msgid "Manage views"
 msgstr "Manage views"
 
+#: src/app/more-screen.tsx
+msgid "Manage your collections in mdbase Connect"
+msgstr "Manage your collections in mdbase Connect"
+
 #: src/app/view-editor-fields.ts
 #: src/app/views-screen.tsx
 msgid "Manual order"
@@ -3373,6 +3476,10 @@ msgstr "Markdown link"
 #: src/components/task-model-settings.tsx
 msgid "Markdown links"
 msgstr "Markdown links"
+
+#: src/app/import-screen.tsx
+msgid "Markdown preview"
+msgstr "Markdown preview"
 
 #: src/components/task-complete-on-panel.tsx
 msgid "Marks that day’s occurrence as done."
@@ -3472,10 +3579,6 @@ msgstr "More"
 #: src/app/views/view-catalog.tsx
 msgid "More actions for {0}"
 msgstr "More actions for {0}"
-
-#: src/app/task-screen.tsx
-msgid "More properties"
-msgstr "More properties"
 
 #: src/components/task-actions.tsx
 msgid "More task actions"
@@ -3787,7 +3890,7 @@ msgid "No computed properties."
 msgstr "No computed properties."
 
 #: src/app/bulk-task-actions.tsx
-#: src/components/task-detail-dates.tsx
+#: src/app/task-property-list.tsx
 #: src/components/tasknotes-controls.tsx
 msgid "No date"
 msgstr "No date"
@@ -3840,14 +3943,6 @@ msgstr "No projections"
 msgid "No recovery key is held on this device."
 msgstr "No recovery key is held on this device."
 
-#: src/components/reminder-editor.tsx
-msgid "No reminders set."
-msgstr "No reminders set."
-
-#: src/app/task-editor-draft.ts
-msgid "No repeat or reminder"
-msgstr "No repeat or reminder"
-
 #: src/app/views/kanban-columns.ts
 msgid "No status"
 msgstr "No status"
@@ -3893,7 +3988,7 @@ msgstr "No upcoming dates in this pattern."
 msgid "No upcoming tasks here."
 msgstr "No upcoming tasks here."
 
-#: src/app/task-custom-field.tsx
+#: src/app/task-property-list.tsx
 #: src/app/views/kanban-columns.ts
 #: src/components/task-property-editor.tsx
 msgid "No value"
@@ -3933,7 +4028,6 @@ msgid "Not connected"
 msgstr "Not connected"
 
 #: src/app/more-screen.tsx
-#: src/app/views/project-property-offer.tsx
 msgid "Not now"
 msgstr "Not now"
 
@@ -3948,6 +4042,10 @@ msgstr "Not saved · Review"
 #: src/app/task-screen.tsx
 msgid "Not saved. Review your edit."
 msgstr "Not saved. Review your edit."
+
+#: src/app/import-screen.tsx
+msgid "Not started"
+msgstr "Not started"
 
 #. placeholder {0}: descriptions.join("; ")
 #: src/components/expression-builder.tsx
@@ -3990,10 +4088,6 @@ msgstr "Notifications are not available here"
 #: src/app/more-screen.tsx
 msgid "Notifications are turned off for TaskNotes in system settings. Turn them on there to receive reminders."
 msgstr "Notifications are turned off for TaskNotes in system settings. Turn them on there to receive reminders."
-
-#: src/components/reminder-editor.tsx
-msgid "Notify at a fixed time or relative to this task."
-msgstr "Notify at a fixed time or relative to this task."
 
 #: src/components/tasknotes-controls.tsx
 msgid "Now"
@@ -4194,6 +4288,10 @@ msgstr "P0D"
 msgid "P14D"
 msgstr "P14D"
 
+#: src/app/more-screen.tsx
+msgid "Part of mdbase"
+msgstr "Part of mdbase"
+
 #: src/components/private-account-settings.tsx
 msgid "Password strength: "
 msgstr "Password strength: "
@@ -4253,13 +4351,13 @@ msgstr "Planner is a separate app. Save this view, then choose Open in Planner."
 msgid "Planner will open this saved view."
 msgstr "Planner will open this saved view."
 
-#: src/app/task-screen.tsx
-msgid "Preview"
-msgstr "Preview"
-
 #: src/app/view-editor.tsx
 msgid "Preview "
 msgstr "Preview "
+
+#: src/app/import-screen.tsx
+msgid "Preview import"
+msgstr "Preview import"
 
 #: src/app/view-editor.tsx
 msgid "Preview tasks"
@@ -4316,7 +4414,7 @@ msgid "Priorities"
 msgstr "Priorities"
 
 #: src/app/bulk-task-actions.tsx
-#: src/app/task-core-properties.tsx
+#: src/app/task-property-list.tsx
 #: src/app/view-editor-fields.ts
 #: src/app/view-editor-form.tsx
 #: src/app/view-sort-choices.tsx
@@ -4361,7 +4459,7 @@ msgstr "Private collections need your desktop online."
 
 #: src/app/bulk-task-actions.tsx
 #: src/app/calendar-row-details.ts
-#: src/app/task-core-properties.tsx
+#: src/app/task-property-list.tsx
 #: src/components/task-actions.tsx
 msgid "Project"
 msgstr "Project"
@@ -4465,6 +4563,10 @@ msgstr "Records the day you finished it."
 msgid "Recover account access"
 msgstr "Recover account access"
 
+#: src/app/import-screen.tsx
+msgid "Recover original writes"
+msgstr "Recover original writes"
+
 #: src/components/task-capture.tsx
 msgid "Recover task"
 msgstr "Recover task"
@@ -4538,10 +4640,6 @@ msgid "Refreshing…"
 msgstr "Refreshing…"
 
 #: src/components/dependency-editor.tsx
-msgid "Related work"
-msgstr "Related work"
-
-#: src/components/dependency-editor.tsx
 msgid "Relationship"
 msgstr "Relationship"
 
@@ -4550,15 +4648,12 @@ msgid "Relationships"
 msgstr "Relationships"
 
 #: src/components/reminder-editor.tsx
-msgid "Relative"
-msgstr "Relative"
-
-#: src/components/reminder-editor.tsx
 msgid "Relative to"
 msgstr "Relative to"
 
 #: src/app/scratchpad-note.tsx
 #: src/app/scratchpad-screen.tsx
+msgctxt "scratchpad: load notes again"
 msgid "Reload"
 msgstr "Reload"
 
@@ -4592,7 +4687,7 @@ msgid "Reminder time"
 msgstr "Reminder time"
 
 #: src/app/settings-sections.ts
-#: src/components/reminder-editor.tsx
+#: src/app/task-property-list.tsx
 msgid "Reminders"
 msgstr "Reminders"
 
@@ -4676,6 +4771,7 @@ msgid "Rendering…"
 msgstr "Rendering…"
 
 #: src/components/task-row.tsx
+msgctxt "task action: mark incomplete"
 msgid "Reopen"
 msgstr "Reopen"
 
@@ -4720,14 +4816,11 @@ msgstr "Reordered “{title}”"
 msgid "Reordered {0}."
 msgstr "Reordered {0}."
 
+#: src/app/task-property-list.tsx
 #: src/components/recurrence-field.tsx
 #: src/components/task-capture.tsx
 msgid "Repeat"
 msgstr "Repeat"
-
-#: src/app/task-screen.tsx
-msgid "Repeat and reminders"
-msgstr "Repeat and reminders"
 
 #: src/components/recurrence-field.tsx
 msgid "Repeat frequency"
@@ -4859,6 +4952,10 @@ msgstr "Retry, or undo to restore the task here."
 msgid "Retrying…"
 msgstr "Retrying…"
 
+#: src/main.tsx
+msgid "Return to the TaskNotes app"
+msgstr "Return to the TaskNotes app"
+
 #: src/app/view-editor-form.tsx
 msgid "Reusable values for filters, grouping, sorting, and fields."
 msgstr "Reusable values for filters, grouping, sorting, and fields."
@@ -4870,6 +4967,10 @@ msgstr "Reusable values for grouping and displayed fields."
 #: src/app/app-shell.tsx
 msgid "Review access"
 msgstr "Review access"
+
+#: src/app/import-screen.tsx
+msgid "Review import"
+msgstr "Review import"
 
 #: src/app/more-screen.tsx
 msgid "Review notification access"
@@ -4895,6 +4996,10 @@ msgstr "Review strict mode"
 msgid "Review TaskNotes’ access"
 msgstr "Review TaskNotes’ access"
 
+#: src/app/import-screen.tsx
+msgid "Review the import before continuing."
+msgstr "Review the import before continuing."
+
 #: src/app/views-screen.tsx
 msgid "Review the task before making another change."
 msgstr "Review the task before making another change."
@@ -4916,10 +5021,6 @@ msgstr "Save"
 #: src/components/task-actions.tsx
 msgid "Save {0}"
 msgstr "Save {0}"
-
-#: src/components/reminder-editor.tsx
-msgid "Save a fixed or relative reminder in this task."
-msgstr "Save a fixed or relative reminder in this task."
 
 #: src/components/app-update-notice.tsx
 msgid "Save and reload TaskNotes"
@@ -4972,10 +5073,6 @@ msgstr "Saved on this device; waiting for sync"
 #: src/app/views-screen.tsx
 msgid "Saved view"
 msgstr "Saved view"
-
-#: src/components/task-model-settings.tsx
-msgid "Saved with the collection and used by every app that opens it."
-msgstr "Saved with the collection and used by every app that opens it."
 
 #: src/components/task-model-settings.tsx
 msgid "Saved with the collection."
@@ -5036,6 +5133,7 @@ msgid "scheduled"
 msgstr "scheduled"
 
 #: src/app/calendar-row-details.ts
+#: src/app/task-property-list.tsx
 #: src/app/view-editor-fields.ts
 #: src/components/reminder-editor.tsx
 #: src/components/task-actions.tsx
@@ -5069,6 +5167,7 @@ msgstr "Scheduled {0}"
 msgid "Scheduled {tasks} for {0}"
 msgstr "Scheduled {tasks} for {0}"
 
+#: src/app/import-screen.tsx
 #: src/app/view-sort-choices.tsx
 msgid "Scheduled date"
 msgstr "Scheduled date"
@@ -5109,6 +5208,7 @@ msgstr "Scratchpad storage is unavailable."
 #: src/app/keyboard-shortcuts.ts
 #: src/app/palette-commands.ts
 #: src/app/search-screen.tsx
+#: src/app/task-property-list.tsx
 #: src/app/views/view-catalog.tsx
 msgid "Search"
 msgstr "Search"
@@ -5156,6 +5256,7 @@ msgstr "See Upcoming"
 msgid "Select {0}"
 msgstr "Select {0}"
 
+#: src/app/import-screen.tsx
 #: src/app/scratchpad-note.tsx
 msgid "Select all"
 msgstr "Select all"
@@ -5290,10 +5391,6 @@ msgstr "Show all-day area"
 msgid "Show current time"
 msgstr "Show current time"
 
-#: src/app/views/project-property-offer.tsx
-msgid "Show each task’s project on Today?"
-msgstr "Show each task’s project on Today?"
-
 #: src/app/search-screen.tsx
 msgid "Show fewer"
 msgstr "Show fewer"
@@ -5313,10 +5410,6 @@ msgstr "Show more days"
 #: src/app/search-screen.tsx
 msgid "Show more results"
 msgstr "Show more results"
-
-#: src/app/views/project-property-offer.tsx
-msgid "Show projects"
-msgstr "Show projects"
 
 #: src/components/calendar-preferences.tsx
 msgid "Show tracked time"
@@ -5371,6 +5464,10 @@ msgstr "Skip occurrence"
 #: src/app/app-shell.tsx
 msgid "Skip to content"
 msgstr "Skip to content"
+
+#: src/app/import-screen.tsx
+msgid "Skipped"
+msgstr "Skipped"
 
 #: src/app/view-editor-form.tsx
 msgid "Skipped recurring instances"
@@ -5452,7 +5549,7 @@ msgid "Starts"
 msgstr "Starts"
 
 #: src/app/bulk-task-actions.tsx
-#: src/app/task-core-properties.tsx
+#: src/app/task-property-list.tsx
 #: src/app/view-editor-fields.ts
 #: src/app/view-editor-form.tsx
 #: src/components/task-actions.tsx
@@ -5484,6 +5581,10 @@ msgstr "Status: {0}"
 msgid "Statuses"
 msgstr "Statuses"
 
+#: src/app/more-screen.tsx
+msgid "Statuses, priorities, and custom fields"
+msgstr "Statuses, priorities, and custom fields"
+
 #: src/app/running-timer.tsx
 #: src/app/task-time-tracking.tsx
 msgid "Stop"
@@ -5492,6 +5593,14 @@ msgstr "Stop"
 #: src/components/task-model-settings.tsx
 msgid "Stop a running timer when its task is completed"
 msgstr "Stop a running timer when its task is completed"
+
+#: src/app/import-screen.tsx
+msgid "Stop after the current task"
+msgstr "Stop after the current task"
+
+#: src/app/import-screen.tsx
+msgid "Stop after the current task before leaving."
+msgstr "Stop after the current task before leaving."
 
 #: src/app/palette-commands.ts
 #: src/components/task-actions.tsx
@@ -5529,7 +5638,6 @@ msgid "Subtask title"
 msgstr "Subtask title"
 
 #: src/app/task-subtasks.tsx
-#: src/components/dependency-editor.tsx
 #: src/components/task-row.tsx
 msgid "Subtasks"
 msgstr "Subtasks"
@@ -5577,7 +5685,7 @@ msgstr "tags"
 
 #: src/app/bulk-task-actions.tsx
 #: src/app/search-screen.tsx
-#: src/app/task-screen.tsx
+#: src/app/task-property-list.tsx
 #: src/app/view-editor-fields.ts
 #: src/app/view-editor-form.tsx
 #: src/components/task-actions.tsx
@@ -5657,7 +5765,9 @@ msgstr "Task lists"
 msgid "Task not found. It may have been deleted or moved."
 msgstr "Task not found. It may have been deleted or moved."
 
-#: src/app/task-core-properties.tsx
+#: src/app/settings-sections.ts
+#: src/app/task-property-list.tsx
+#: src/components/task-model-settings.tsx
 #: src/components/task-properties-sheet.tsx
 msgid "Task properties"
 msgstr "Task properties"
@@ -5669,6 +5779,10 @@ msgstr "Task reminders"
 #: src/app/task-screen.tsx
 msgid "Task title"
 msgstr "Task title"
+
+#: src/app/import-screen.tsx
+msgid "Task type"
+msgstr "Task type"
 
 #: src/components/task-capture.tsx
 msgid "Task: "
@@ -5685,6 +5799,10 @@ msgstr "TaskNotes could not open the install prompt."
 #: src/app/app-shell.tsx
 msgid "TaskNotes could not open."
 msgstr "TaskNotes could not open."
+
+#: src/app/more-screen.tsx
+msgid "TaskNotes is one of the mdbase apps. Your tasks are Markdown files in your collection, so other mdbase apps and editors like Obsidian can open them too."
+msgstr "TaskNotes is one of the mdbase apps. Your tasks are Markdown files in your collection, so other mdbase apps and editors like Obsidian can open them too."
 
 #: src/components/operation-error-notice.tsx
 msgid "TaskNotes keeps checking automatically while the collection is connected. You can keep working."
@@ -5722,6 +5840,10 @@ msgstr "Tasks are portable Markdown records in the mdbase v0.3 format."
 #: src/app/use-calendar-overflow.ts
 msgid "Tasks for {0}"
 msgstr "Tasks for {0}"
+
+#: src/app/import-screen.tsx
+msgid "Tasks stay unchanged in Todoist. Imports only create new records."
+msgstr "Tasks stay unchanged in Todoist. Imports only create new records."
 
 #: src/app/view-empty-state.tsx
 msgid "Tasks with no date land here."
@@ -5901,19 +6023,7 @@ msgstr "The task remains in the collection. Try again."
 msgid "The view change"
 msgstr "The view change"
 
-#: src/app/views/project-property-offer.tsx
-msgid "The view could not be updated. {error}"
-msgstr "The view could not be updated. {error}"
-
-#: src/app/more-screen.tsx
-msgid "Theme, Scratchpad, and calendar"
-msgstr "Theme, Scratchpad, and calendar"
-
-#: src/app/more-screen.tsx
-msgid "These choices apply as soon as you make them and don’t change the collection."
-msgstr "These choices apply as soon as you make them and don’t change the collection."
-
-#: src/app/task-core-properties.tsx
+#: src/app/task-property-list.tsx
 msgid "These dates edit the repeating task, including future occurrences."
 msgstr "These dates edit the repeating task, including future occurrences."
 
@@ -6064,12 +6174,11 @@ msgstr "This view uses an unavailable sort."
 msgid "This weekend"
 msgstr "This weekend"
 
-#: src/components/reminder-editor.tsx
 #: src/components/tasknotes-controls.tsx
 msgid "Time"
 msgstr "Time"
 
-#: src/app/task-screen.tsx
+#: src/app/task-property-list.tsx
 #: src/app/task-time-tracking.tsx
 msgctxt "time tracking duration"
 msgid "Time"
@@ -6153,6 +6262,14 @@ msgstr "Today · {label}"
 msgid "Today is clear"
 msgstr "Today is clear"
 
+#: src/app/import-screen.tsx
+msgid "Todoist API priority {priority}"
+msgstr "Todoist API priority {priority}"
+
+#: src/app/import-screen.tsx
+msgid "Todoist task dates"
+msgstr "Todoist task dates"
+
 #: src/app/keyboard-shortcuts.ts
 #: src/app/palette-commands.ts
 msgid "Toggle sidebar"
@@ -6203,10 +6320,6 @@ msgstr "Try loading the view again. If the problem continues, edit its settings 
 msgid "Try tomorrow 9am, #tag, @context, +project."
 msgstr "Try tomorrow 9am, #tag, @context, +project."
 
-#: src/components/reminder-editor.tsx
-msgid "Type"
-msgstr "Type"
-
 #: src/components/task-capture.tsx
 msgid "Type {example} in the task title."
 msgstr "Type {example} in the task title."
@@ -6222,6 +6335,10 @@ msgstr "Type of {name}"
 #: src/components/assignee-editor.tsx
 msgid "Unassigned"
 msgstr "Unassigned"
+
+#: src/app/import-screen.tsx
+msgid "Uncertain"
+msgstr "Uncertain"
 
 #: src/components/task-capture.tsx
 msgid "Understanding…"
@@ -6350,7 +6467,7 @@ msgstr "Use the configured due field."
 msgid "Use the configured scheduled field."
 msgstr "Use the configured scheduled field."
 
-#: src/app/task-core-properties.tsx
+#: src/app/task-property-list.tsx
 msgid "Use the occurrence actions above to change this state."
 msgstr "Use the occurrence actions above to change this state."
 
@@ -6464,6 +6581,10 @@ msgstr "What is mdbase?"
 msgid "What needs doing?"
 msgstr "What needs doing?"
 
+#: src/components/reminder-editor.tsx
+msgid "When due"
+msgstr "When due"
+
 #: src/app/occurrence-policy-field.tsx
 msgid "When I choose"
 msgstr "When I choose"
@@ -6471,6 +6592,10 @@ msgstr "When I choose"
 #: src/components/task-date-panel.tsx
 msgid "When it has to be done"
 msgstr "When it has to be done"
+
+#: src/components/reminder-editor.tsx
+msgid "When scheduled"
+msgstr "When scheduled"
 
 #: src/components/task-model-settings.tsx
 msgid "When the previous one is completed"
@@ -6497,13 +6622,17 @@ msgstr "Wikilinks"
 msgid "Work session"
 msgstr "Work session"
 
+#. Settings section: how the collection handles new, repeating, and archived tasks
+#. Settings section: how the collection handles new, repeating, and archived tasks
+#: src/app/settings-sections.ts
+#: src/components/task-model-settings.tsx
+msgid "Workflow"
+msgstr "Workflow"
+
+#: src/app/import-screen.tsx
 #: src/components/private-account-settings.tsx
 msgid "Working…"
 msgstr "Working…"
-
-#: src/app/task-screen.tsx
-msgid "Write"
-msgstr "Write"
 
 #: src/components/scratchpad-note-editor.tsx
 msgid "Writing tools"
