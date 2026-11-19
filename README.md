@@ -1,3 +1,5 @@
+> **Fork maintained by [Madame Labs](https://github.com/MadameLabs) ([@engarthurcardoso](https://github.com/engarthurcardoso)).** Original project by Callum Alpass: [callumalpass/tasknotes-app](https://github.com/callumalpass/tasknotes-app). The upstream repository has no license yet; we have asked the author for permission in [callumalpass/tasknotes-app#514](https://github.com/callumalpass/tasknotes-app/issues/514). Report problems with this fork in [MadameLabs/madametasks](https://github.com/MadameLabs/madametasks/issues).
+
 # TaskNotes
 
 TaskNotes is a task manager for the web, iPhone, iPad, and Android. It lets you
